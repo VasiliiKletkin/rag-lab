@@ -1,0 +1,32 @@
+[
+  {
+    "file": "python-3.14-tutorial-datastructures.rst",
+    "url": "https://raw.githubusercontent.com/python/cpython/3.14/Doc/tutorial/datastructures.rst",
+    "title": "Python 3.14 Tutorial: Data Structures",
+    "license": "PSF License Version 2 (Python documentation)"
+  },
+  {
+    "file": "python-3.14-asyncio-task.rst",
+    "url": "https://raw.githubusercontent.com/python/cpython/3.14/Doc/library/asyncio-task.rst",
+    "title": "Python 3.14 Library Reference: Coroutines and Tasks (asyncio)",
+    "license": "PSF License Version 2 (Python documentation)"
+  },
+  {
+    "file": "postgresql-16-index-types.txt",
+    "url": "https://www.postgresql.org/docs/16/indexes-types.html",
+    "title": "PostgreSQL 16 Documentation: 11.2. Index Types",
+    "license": "PostgreSQL License"
+  },
+  {
+    "file": "postgresql-16-textsearch-intro.txt",
+    "url": "https://www.postgresql.org/docs/16/textsearch-intro.html",
+    "title": "PostgreSQL 16 Documentation: 12.1. Introduction (Full Text Search)",
+    "license": "PostgreSQL License"
+  },
+  {
+    "file": "pgvector-readme.md",
+    "url": "https://raw.githubusercontent.com/pgvector/pgvector/v0.8.7/README.md",
+    "title": "pgvector 0.8.7 README",
+    "license": "PostgreSQL License (pgvector)"
+  }
+]
