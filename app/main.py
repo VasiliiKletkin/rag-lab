@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, status
 
 from app import __version__
@@ -10,6 +12,8 @@ from app.schemas import (
     SearchRequest,
     SearchResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="rag-lab", version=__version__)
 
@@ -33,7 +37,8 @@ def ready() -> dict[str, str]:
     try:
         version = pgvector_version()
     except Exception as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"database: {exc}") from exc
+        logger.warning("readiness check failed: %s", exc)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable") from exc
     if version is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "pgvector extension missing")
     return {"status": "ready", "pgvector": version}
