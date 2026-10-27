@@ -1,4 +1,4 @@
-"""Stage 1: split documents into overlapping chunks."""
+"""Этап 1: нарезка документов на куски с перекрытием."""
 
 from dataclasses import dataclass, field
 
@@ -12,9 +12,10 @@ class Chunk:
 
 
 def split_text(document: str, text: str, size: int, overlap: int) -> list[Chunk]:
-    """Split `text` into chunks of about `size` characters with `overlap` between neighbours.
+    """Нарезать `text` на куски примерно по `size` символов с перекрытием `overlap`.
 
-    TODO(stage 1): start with a fixed-size splitter, then try splitting on headings and
-    paragraphs first (recursive splitting) and compare retrieval quality in stage 7.
+    TODO(этап 1): начать с нарезки фиксированного размера, затем попробовать резать
+    сначала по заголовкам и абзацам (рекурсивная нарезка) и сравнить качество
+    поиска на этапе 7.
     """
     raise NotImplementedError

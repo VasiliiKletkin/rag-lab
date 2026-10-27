@@ -1,1 +1,1 @@
-"""RAG building blocks. Each module is filled in at the matching README roadmap stage."""
+"""Строительные блоки RAG. Каждый модуль заполняется на своём этапе плана из README."""

@@ -1,7 +1,7 @@
 [project]
 name = "rag-lab"
 version = "0.1.0"
-description = "Hands-on lab: RAG, embeddings, pgvector/Qdrant, LangChain/LlamaIndex, evals, agents and MCP on a FastAPI backend."
+description = "Практическая лаборатория по RAG: эмбеддинги, pgvector/Qdrant, LangChain/LlamaIndex, evals, агенты и MCP на FastAPI."
 readme = "README.md"
 license = "MIT"
 authors = [

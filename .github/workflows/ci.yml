@@ -21,11 +21,11 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
-      - name: Install dependencies
+      - name: Установка зависимостей
         run: uv sync --locked
-      - name: Ruff lint
+      - name: Линтер ruff
         run: uv run ruff check .
-      - name: Ruff format
+      - name: Форматирование ruff
         run: uv run ruff format --check .
-      - name: Tests
+      - name: Тесты
         run: uv run pytest -q

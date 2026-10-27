@@ -1,4 +1,4 @@
-"""Stage 2: turn text into vectors."""
+"""Этап 2: превращение текста в векторы."""
 
 from typing import Protocol
 
@@ -11,5 +11,6 @@ class Embedder(Protocol):
     def embed_query(self, text: str) -> list[float]: ...
 
 
-# TODO(stage 2): LocalEmbedder backed by sentence-transformers (settings.embedding_model),
-#   optionally an API-backed embedder (e.g. Voyage AI) behind the same protocol.
+# TODO(этап 2): LocalEmbedder на sentence-transformers (settings.embedding_model).
+#   У e5 к кускам документов добавляется префикс "passage: ", к вопросам — "query: ".
+#   По желанию: эмбеддер через API (например, Voyage AI) за тем же протоколом.

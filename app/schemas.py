@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class IngestRequest(BaseModel):
-    path: str = Field("data", description="File or directory to ingest")
+    path: str = Field("data", description="Файл или папка для загрузки")
 
 
 class IngestResponse(BaseModel):
@@ -13,9 +13,9 @@ class IngestResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    k: int = Field(5, ge=1, le=50)
-    mode: Literal["vector", "hybrid", "rerank"] = "vector"
+    query: str = Field(description="Поисковый запрос")
+    k: int = Field(5, ge=1, le=50, description="Сколько кусков вернуть")
+    mode: Literal["vector", "hybrid", "rerank"] = Field("vector", description="Режим поиска")
 
 
 class SearchHit(BaseModel):
@@ -30,8 +30,8 @@ class SearchResponse(BaseModel):
 
 
 class AskRequest(BaseModel):
-    question: str
-    k: int = Field(5, ge=1, le=20)
+    question: str = Field(description="Вопрос по корпусу документов")
+    k: int = Field(5, ge=1, le=20, description="Сколько кусков дать модели как контекст")
 
 
 class Citation(BaseModel):

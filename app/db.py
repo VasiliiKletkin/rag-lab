@@ -4,7 +4,7 @@ from app.config import get_settings
 
 
 def pgvector_version() -> str | None:
-    """Return the installed pgvector version, or None if the extension is missing."""
+    """Версия установленного pgvector или None, если расширения нет."""
     with psycopg.connect(get_settings().database_url, connect_timeout=3) as conn:
         row = conn.execute(
             "SELECT extversion FROM pg_extension WHERE extname = 'vector'"

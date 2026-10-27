@@ -11,18 +11,18 @@ dist/
 build/
 *.egg-info/
 
-# Env and secrets
+# Окружение и секреты
 .env
 .env.*
 !.env.example
 
-# Local artifacts
+# Локальные артефакты
 .cache/
 models/
 evals/results/*.json
 *.log
 
-# OS / editors
+# ОС и редакторы
 .DS_Store
 .idea/
 .vscode/

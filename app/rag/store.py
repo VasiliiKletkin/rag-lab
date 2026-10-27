@@ -1,4 +1,4 @@
-"""Stages 2, 3 and 6: persist chunks + vectors and query them."""
+"""Этапы 2, 3 и 6: хранение кусков и векторов и поиск по ним."""
 
 from typing import Protocol
 
@@ -12,6 +12,6 @@ class VectorStore(Protocol):
     def search(self, vector: list[float], k: int) -> list[SearchHit]: ...
 
 
-# TODO(stage 2): PgVectorStore - tables `documents` and `chunks` with `embedding vector(N)`
-#   and an HNSW index (vector_cosine_ops).
-# TODO(stage 6): QdrantStore implementing the same protocol.
+# TODO(этап 2): PgVectorStore — таблицы `documents` и `chunks` с колонкой
+#   `embedding vector(N)` и индексом HNSW (vector_cosine_ops).
+# TODO(этап 6): QdrantStore с тем же протоколом.

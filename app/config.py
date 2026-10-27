@@ -5,28 +5,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """App settings, read from environment variables and `.env`."""
+    """Настройки приложения из переменных окружения и `.env`."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://rag:rag@localhost:5432/rag"
 
-    # Stage 2: embeddings
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Этап 2: эмбеддинги. Модель мультиязычная: вопросы на русском, документы на английском.
+    embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
 
-    # Stage 1: chunking
+    # Этап 1: нарезка на куски
     chunk_size: int = 800
     chunk_overlap: int = 120
 
-    # Stage 3: retrieval
+    # Этап 3: поиск
     top_k: int = 5
 
-    # Stage 4: generation
+    # Этап 4: генерация
     anthropic_api_key: SecretStr | None = None
     llm_model: str = "claude-sonnet-5-5"
 
-    # Stage 6: second vector store
+    # Этап 6: вторая векторная база
     vector_backend: str = "pgvector"  # "pgvector" | "qdrant"
     qdrant_url: str = "http://localhost:6333"
 

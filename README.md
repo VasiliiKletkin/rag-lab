@@ -1,51 +1,61 @@
 # rag-lab
 
-A hands-on lab for Retrieval-Augmented Generation, built the way I build production
-backends: FastAPI, PostgreSQL, Docker, tests and CI from day one.
+Практическая лаборатория по Retrieval-Augmented Generation (RAG), собранная так, как я
+строю продакшн-бэкенды: FastAPI, PostgreSQL, Docker, тесты и CI с первого дня.
 
-The goal is to learn RAG properly by building it in small, measurable steps: chunking,
-embeddings, vector search in pgvector and Qdrant, hybrid search and reranking, answers with
-citations from Claude, the same pipeline in LangChain and LlamaIndex, evals, tool calling,
-and an MCP server. Each stage below has a checklist, links to the official docs, and a
-"done when" bar that can be checked.
+Цель — честно разобраться в RAG, собирая его небольшими измеримыми шагами: нарезка текста
+на куски (чанкинг), эмбеддинги, векторный поиск в pgvector и Qdrant, гибридный поиск
+и переранжирование, ответы Claude со ссылками на источники, тот же пайплайн на LangChain
+и LlamaIndex, оценка качества (evals), вызов инструментов (tool calling) и MCP-сервер.
+У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
+критерий «готово».
 
-**Status:** stage 0 (scaffold). `/health` and `/ready` work; `/ingest`, `/search` and `/ask`
-return `501` until their stages are done.
+**Статус:** этап 0 (каркас). `/health` и `/ready` работают; `/ingest`, `/search` и `/ask`
+отвечают `501`, пока не сделаны их этапы.
 
-## Stack
+## Стек
 
-| Layer | Choice |
+| Слой | Выбор |
 |---|---|
 | API | Python 3.12, FastAPI, Pydantic Settings |
-| Storage | PostgreSQL 16 + pgvector 0.8.7 (Docker), Qdrant 1.20 (stage 6) |
-| Embeddings | sentence-transformers, local (stage 2); API embeddings optional |
-| LLM | Claude via the Anthropic Python SDK, default model `claude-sonnet-5-5` |
-| Frameworks | LangChain (LCEL), LlamaIndex (stage 5), for comparison |
-| Quality | Own eval set: recall@k, MRR, LLM-as-judge; ragas optional (stage 7) |
-| Tooling | uv, ruff, pytest, GitHub Actions |
+| Хранилище | PostgreSQL 16 + pgvector 0.8.7 (Docker), Qdrant 1.20 (этап 6) |
+| Эмбеддинги | sentence-transformers локально, мультиязычная модель `intfloat/multilingual-e5-small` (этап 2); API-эмбеддинги по желанию |
+| LLM | Claude через официальный Python SDK `anthropic`, модель по умолчанию `claude-sonnet-5-5` |
+| Фреймворки | LangChain (LCEL) и LlamaIndex для сравнения (этап 5) |
+| Качество | Свой набор вопросов: recall@k, MRR, LLM-as-judge; ragas по желанию (этап 7) |
+| Инструменты | uv, ruff, pytest, GitHub Actions |
 
-## How it fits together
+## Как всё связано
 
 ```mermaid
 flowchart LR
-    subgraph Ingest
-        F[data/*] --> L[load] --> C[chunk] --> E[embed] --> V[(pgvector / Qdrant)]
+    subgraph Загрузка
+        F[data/*] --> L[чтение] --> C[нарезка на куски] --> E[эмбеддинги] --> V[(pgvector / Qdrant)]
     end
-    subgraph Ask
-        Q[question] --> R[retrieve: vector + full-text] --> F2[RRF fusion] --> RR[rerank]
-        RR --> G[Claude: answer + citations]
+    subgraph Вопрос
+        Q[вопрос] --> R[поиск: векторный + полнотекстовый] --> F2[слияние RRF] --> RR[переранжирование]
+        RR --> G[Claude: ответ + цитаты]
     end
     V --> R
 ```
 
-## Quick start
+**Загрузка:** документ режется на куски по ~800 символов, каждый кусок превращается
+в вектор и вместе с текстом сохраняется в Postgres.
+**Вопрос:** вопрос тоже превращается в вектор, в базе ищутся ближайшие куски, Claude
+получает их как контекст и отвечает со ссылками на них.
 
-Prerequisites: [uv](https://docs.astral.sh/uv/) and Docker.
+**Языки.** Документы в `data/` на английском (это оригинальная документация), вопросы
+и ответы на русском. Получается кросс-языковой поиск, поэтому модель эмбеддингов
+и переранжировщик должны быть мультиязычными.
+
+## Быстрый старт
+
+Нужны [uv](https://docs.astral.sh/uv/) и Docker.
 
 ```bash
 cp .env.example .env
-docker compose up -d            # Postgres 16 + pgvector, waits for the healthcheck
-uv sync                         # creates .venv from uv.lock
+docker compose up -d            # Postgres 16 + pgvector, ждёт healthcheck
+uv sync                         # создаёт .venv по uv.lock
 uv run uvicorn app.main:app --reload
 ```
 
@@ -54,210 +64,219 @@ curl localhost:8000/health      # {"status":"ok","version":"0.1.0"}
 curl localhost:8000/ready       # {"status":"ready","pgvector":"0.8.7"}
 ```
 
-Checks (the same ones CI runs):
+Проверки (те же, что запускает CI):
 
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run pytest
 ```
 
-Qdrant for stage 6: `docker compose --profile qdrant up -d`.
+Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 
-## Layout
+## Структура
 
 ```
 app/
-  main.py          FastAPI app: /health, /ready, /ingest, /search, /ask
-  config.py        settings from env / .env
-  db.py            Postgres helpers
-  schemas.py       request and response models (the API contract)
-  rag/             chunking, embeddings, store, retrieval, generation (stubs to fill in)
-data/              sample corpus + manifest.json (see data/README.md)
-db/init/           SQL run on first Postgres start (CREATE EXTENSION vector)
-evals/             eval questions (questions.example.jsonl shows the format)
-scripts/           fetch_data.py downloads the corpus
-docs/notes.md      learning log, one entry per stage
+  main.py          FastAPI: /health, /ready, /ingest, /search, /ask
+  config.py        настройки из переменных окружения и .env
+  db.py            работа с Postgres
+  schemas.py       модели запросов и ответов (контракт API)
+  rag/             нарезка, эмбеддинги, хранилище, поиск, генерация (заготовки)
+data/              учебный корпус + manifest.json (см. data/README.md)
+db/init/           SQL, который выполняется при первом старте Postgres
+evals/             вопросы для оценки качества (формат в questions.example.jsonl)
+scripts/           fetch_data.py скачивает корпус
+docs/notes.md      дневник обучения, запись на каждый этап
 tests/
 ```
 
-## Roadmap
+## План (roadmap)
 
-Work through the stages in order. After each one, write a short entry in
-[`docs/notes.md`](docs/notes.md): what you built, the numbers, what surprised you.
-Install a stage's libraries when you get to it (`uv add ...`), so every dependency in
-`pyproject.toml` is one you actually use.
+Этапы идут по порядку. После каждого — короткая запись в [`docs/notes.md`](docs/notes.md):
+что сделал, какие цифры получил, что удивило. Библиотеки этапа ставь, когда до него
+дошёл (`uv add ...`), чтобы в `pyproject.toml` были только реально используемые зависимости.
+Официальная документация почти везде только на английском.
 
-### Stage 0. Environment
+### Этап 0. Окружение
 
-- [x] uv project, ruff, pytest, GitHub Actions
-- [x] `docker compose` with Postgres 16 + pgvector, healthcheck, init script
-- [x] FastAPI app with `/health` (liveness) and `/ready` (Postgres + pgvector check)
-- [ ] Run it yourself: `docker compose up -d`, `/ready` returns the pgvector version
-- [ ] Connect with `psql` and run `\dx`; read `docker-compose.yml` and `db/init/` line by line
-- [ ] CI is green on GitHub
+- [x] Проект на uv, ruff, pytest, GitHub Actions
+- [x] `docker compose` с Postgres 16 + pgvector, healthcheck, init-скрипт
+- [x] FastAPI с `/health` (жив ли процесс) и `/ready` (доступны ли Postgres и pgvector)
+- [ ] Запустить самому: `docker compose up -d`, `/ready` возвращает версию pgvector
+- [ ] Подключиться через `psql` и выполнить `\dx`; построчно разобрать `docker-compose.yml` и `db/init/`
+- [ ] CI зелёный на GitHub
 
-Docs: [uv projects](https://docs.astral.sh/uv/concepts/projects/) ·
+Документация: [uv: проекты](https://docs.astral.sh/uv/concepts/projects/) ·
 [Docker Compose](https://docs.docker.com/compose/) ·
 [pgvector](https://github.com/pgvector/pgvector) ·
-[FastAPI first steps](https://fastapi.tiangolo.com/tutorial/first-steps/)
+[FastAPI: первые шаги](https://fastapi.tiangolo.com/tutorial/first-steps/)
 
-**Done when** a fresh clone runs with the Quick start commands and nothing else, and CI passes.
+**Готово, когда** свежий клон запускается командами из «Быстрого старта» и ничем больше,
+а CI проходит.
 
-### Stage 1. Loading and chunking
+### Этап 1. Загрузка и нарезка документов
 
-- [ ] Loader for `.md`, `.rst`, `.txt` that keeps metadata (`file`, `title`, `url` from `data/manifest.json`)
-- [ ] Fixed-size splitter with overlap in `app/rag/chunking.py`, then a recursive one (headings, paragraphs, sentences)
-- [ ] Tables `documents` and `chunks` (SQL migration in `db/`), content hash per document
-- [ ] `POST /ingest` stores documents and chunks; unit tests for the splitter
+- [ ] Загрузчик `.md`, `.rst`, `.txt`, который сохраняет метаданные (`file`, `title`, `url` из `data/manifest.json`)
+- [ ] Нарезка фиксированного размера с перекрытием в `app/rag/chunking.py`, потом рекурсивная (заголовки → абзацы → предложения)
+- [ ] Таблицы `documents` и `chunks` (SQL-миграция в `db/`), хеш содержимого у каждого документа
+- [ ] `POST /ingest` сохраняет документы и куски; юнит-тесты на нарезку
 
-Docs: [Contextual Retrieval (Anthropic)](https://www.anthropic.com/research/contextual-retrieval) ·
-[LangChain text splitters](https://docs.langchain.com/oss/python/integrations/splitters) ·
-[PostgreSQL JSON types](https://www.postgresql.org/docs/16/datatype-json.html) ·
-[PostgreSQL constraints](https://www.postgresql.org/docs/16/ddl-constraints.html)
+Документация: [Contextual Retrieval (Anthropic)](https://www.anthropic.com/research/contextual-retrieval) ·
+[LangChain: text splitters](https://docs.langchain.com/oss/python/integrations/splitters) ·
+[PostgreSQL: типы JSON](https://www.postgresql.org/docs/16/datatype-json.html) ·
+[PostgreSQL: ограничения](https://www.postgresql.org/docs/16/ddl-constraints.html)
 
-**Done when** `POST /ingest` loads all five sample documents, chunk size and overlap come from
-settings, re-ingesting unchanged files writes nothing, and splitter tests cover overlap, empty
-input and a chunk boundary inside a code block.
+**Готово, когда** `POST /ingest` загружает все пять документов, размер куска и перекрытие
+берутся из настроек, повторная загрузка неизменённых файлов ничего не пишет, а тесты
+нарезки покрывают перекрытие, пустой вход и границу куска внутри блока кода.
 
-### Stage 2. Embeddings and pgvector
+### Этап 2. Эмбеддинги и pgvector
 
-- [ ] `uv add sentence-transformers`; `LocalEmbedder` (`all-MiniLM-L6-v2`, 384 dims) behind the `Embedder` protocol
-- [ ] `chunks.embedding vector(384)` + HNSW index with `vector_cosine_ops`
-- [ ] Embed in batches; only new or changed chunks get embedded
-- [ ] Optional: an API embedder (e.g. Voyage AI) behind the same protocol; compare in stage 7
+- [ ] `uv add sentence-transformers`; `LocalEmbedder` (`intfloat/multilingual-e5-small`, 384 измерения) за протоколом `Embedder`
+- [ ] У e5 есть правило: к вопросам добавлять префикс `query: `, к кускам документов — `passage: `
+- [ ] Колонка `chunks.embedding vector(384)` + индекс HNSW с `vector_cosine_ops`
+- [ ] Эмбеддинги считаются пачками; пересчитываются только новые и изменённые куски
+- [ ] По желанию: эмбеддинги через API (например, Voyage AI) за тем же протоколом; сравнить на этапе 7
 
-Docs: [Sentence Transformers quickstart](https://sbert.net/docs/quickstart.html) ·
+Документация: [Sentence Transformers: быстрый старт](https://sbert.net/docs/quickstart.html) ·
 [pgvector-python](https://github.com/pgvector/pgvector-python) ·
-[pgvector HNSW](https://github.com/pgvector/pgvector#hnsw) ·
-[Embeddings (Claude docs)](https://platform.claude.com/docs/en/build-with-claude/embeddings)
+[pgvector: HNSW](https://github.com/pgvector/pgvector#hnsw) ·
+[Эмбеддинги (документация Claude)](https://platform.claude.com/docs/en/build-with-claude/embeddings)
 
-**Done when** every chunk has an embedding, the HNSW index exists, embedding throughput
-(chunks/s) is written down in `docs/notes.md`, and changing the model name forces a re-embed.
+**Готово, когда** у каждого куска есть эмбеддинг, индекс HNSW создан, скорость расчёта
+(кусков в секунду) записана в `docs/notes.md`, а смена модели запускает пересчёт.
 
-### Stage 3. Retrieval: vector, hybrid, rerank
+### Этап 3. Поиск: векторный, гибридный, с переранжированием
 
-- [ ] `mode=vector`: cosine distance (`<=>`) over pgvector, top-k with scores
-- [ ] `mode=hybrid`: Postgres full-text search (`tsvector`, `ts_rank_cd`) + vector, merged with Reciprocal Rank Fusion
-- [ ] `mode=rerank`: hybrid top-50 re-scored by a cross-encoder (e.g. `cross-encoder/ms-marco-MiniLM-L6-v2`)
-- [ ] `EXPLAIN ANALYZE` shows the HNSW index in use; p50 latency per mode in `docs/notes.md`
+- [ ] `mode=vector`: косинусное расстояние (`<=>`) в pgvector, top-k с оценками
+- [ ] `mode=hybrid`: полнотекстовый поиск Postgres (`tsvector`, `ts_rank_cd`) + векторный, слияние через Reciprocal Rank Fusion (RRF)
+- [ ] `mode=rerank`: top-50 гибридного поиска пересортировывает мультиязычный cross-encoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, посильнее — `BAAI/bge-reranker-v2-m3`)
+- [ ] `EXPLAIN ANALYZE` показывает, что используется индекс HNSW; медианная задержка (p50) каждого режима в `docs/notes.md`
 
-Docs: [PostgreSQL ranking search results](https://www.postgresql.org/docs/16/textsearch-controls.html) ·
-[pgvector-python RRF example](https://github.com/pgvector/pgvector-python/blob/master/examples/hybrid_search/rrf.py) ·
-[Cross-encoder usage](https://sbert.net/docs/cross_encoder/usage/usage.html)
+Документация: [PostgreSQL: ранжирование результатов поиска](https://www.postgresql.org/docs/16/textsearch-controls.html) ·
+[pgvector-python: пример RRF](https://github.com/pgvector/pgvector-python/blob/master/examples/hybrid_search/rrf.py) ·
+[Cross-encoder: использование](https://sbert.net/docs/cross_encoder/usage/usage.html)
 
-**Done when** `POST /search` supports all three modes, RRF has a unit test, and you can explain
-on one example query why hybrid found something vector search missed (or the other way round).
-Note: Postgres `ts_rank_cd` is not BM25; say so in the notes, or try `rank-bm25` in Python.
+**Готово, когда** `POST /search` поддерживает все три режима, у RRF есть юнит-тест, и на
+одном примере ты можешь объяснить, почему гибридный поиск нашёл то, что векторный
+пропустил (или наоборот).
+Учти: полнотекстовый поиск Postgres ищет по словам, а русский вопрос не совпадёт
+по словам с английским текстом. Значит, лексическая часть сработает только на
+общих терминах (`HNSW`, `asyncio`, `CREATE INDEX`). Хорошая тема для заметок.
+Ещё учти: `ts_rank_cd` — это не BM25; отметь это или попробуй `rank-bm25` в Python.
 
-### Stage 4. Answer generation with Claude
+### Этап 4. Генерация ответа через Claude
 
-- [ ] Set `ANTHROPIC_API_KEY`; client from the official `anthropic` SDK
-- [ ] Each retrieved chunk is a `document` content block with citations enabled; model from `LLM_MODEL` (`claude-sonnet-5-5`)
-- [ ] `POST /ask` returns `answer` + `citations` (document, chunk id, quoted text)
-- [ ] The model says it does not know when the context has no answer; handle `stop_reason` (`max_tokens`, `refusal`); log token usage
+- [ ] Задать `ANTHROPIC_API_KEY`; клиент из официального SDK `anthropic`
+- [ ] Каждый найденный кусок передаётся как content block типа `document` с включёнными цитатами; модель из `LLM_MODEL` (`claude-sonnet-5-5`)
+- [ ] Ответ на языке вопроса (на русском), цитаты — дословно из английского источника
+- [ ] `POST /ask` возвращает `answer` + `citations` (документ, id куска, цитата)
+- [ ] Модель говорит «не знаю», если в контексте нет ответа; обработка `stop_reason` (`max_tokens`, `refusal`); логирование расхода токенов
 
-Docs: [Messages API](https://platform.claude.com/docs/en/build-with-claude/working-with-messages) ·
+Документация: [Messages API](https://platform.claude.com/docs/en/build-with-claude/working-with-messages) ·
 [Citations](https://platform.claude.com/docs/en/build-with-claude/citations) ·
-[Models overview](https://platform.claude.com/docs/en/about-claude/models/overview) ·
+[Обзор моделей](https://platform.claude.com/docs/en/about-claude/models/overview) ·
 [Python SDK](https://github.com/anthropics/anthropic-sdk-python)
 
-**Done when** the three example questions in `evals/questions.example.jsonl` get correct,
-cited answers, an off-topic question gets "I don't know", and API errors map to clear HTTP
-errors (429 and 5xx from Claude are not your 500).
+**Готово, когда** три вопроса из `evals/questions.example.jsonl` получают верные ответы
+с цитатами, вопрос не по теме получает «не знаю», а ошибки API превращаются в понятные
+HTTP-ошибки (429 и 5xx от Claude — это не твой 500).
 
-### Stage 5. Same pipeline in LangChain and LlamaIndex
+### Этап 5. Тот же пайплайн на LangChain и LlamaIndex
 
-- [ ] LangChain: `PGVector` store + `ChatAnthropic`, retrieval chain written in LCEL (runnables)
-- [ ] LlamaIndex: `PGVectorStore` + Anthropic LLM, `VectorStoreIndex` query engine
-- [ ] `POST /ask` takes `engine=plain|langchain|llamaindex` with the same response shape
-- [ ] `docs/comparison.md`: lines of code, latency, what each framework hides, retrieval quality (rerun after stage 7)
+- [ ] LangChain: хранилище `PGVector` + `ChatAnthropic`, цепочка поиска на LCEL (runnables)
+- [ ] LlamaIndex: `PGVectorStore` + Anthropic LLM, query engine поверх `VectorStoreIndex`
+- [ ] `POST /ask` принимает `engine=plain|langchain|llamaindex`, формат ответа одинаковый
+- [ ] `docs/comparison.md`: строки кода, задержка, что каждый фреймворк прячет, качество поиска (перемерить после этапа 7)
 
-Docs: [LangChain overview](https://docs.langchain.com/oss/python/langchain/overview) ·
-[LangChain runnables (LCEL)](https://reference.langchain.com/python/langchain-core/runnables) ·
-[LangChain PGVector](https://docs.langchain.com/oss/python/integrations/vectorstores/pgvector) ·
-[LlamaIndex Postgres vector store](https://developers.llamaindex.ai/python/framework/integrations/vector_stores/postgres/)
+Документация: [LangChain: обзор](https://docs.langchain.com/oss/python/langchain/overview) ·
+[LangChain: runnables (LCEL)](https://reference.langchain.com/python/langchain-core/runnables) ·
+[LangChain: PGVector](https://docs.langchain.com/oss/python/integrations/vectorstores/pgvector) ·
+[LlamaIndex: Postgres vector store](https://developers.llamaindex.ai/python/framework/integrations/vector_stores/postgres/)
 
-**Done when** all three engines answer the example questions, and the comparison doc gives a
-reasoned recommendation for when to use a framework and when plain code is better.
+**Готово, когда** все три движка отвечают на примерные вопросы, а в сравнении есть
+обоснованная рекомендация: когда брать фреймворк, а когда лучше простой код.
 
-### Stage 6. Qdrant as a second vector store
+### Этап 6. Qdrant как вторая векторная база
 
 - [ ] `docker compose --profile qdrant up -d`; `uv add qdrant-client`
-- [ ] `QdrantStore` implements the `VectorStore` protocol; `VECTOR_BACKEND=pgvector|qdrant`
-- [ ] Payload filters (e.g. search only one document); Qdrant hybrid query (dense + sparse)
-- [ ] Notes: pgvector vs Qdrant for this workload (ops, filtering, scale, cost)
+- [ ] `QdrantStore` реализует протокол `VectorStore`; переключение `VECTOR_BACKEND=pgvector|qdrant`
+- [ ] Фильтры по payload (например, поиск только в одном документе); гибридный запрос Qdrant (dense + sparse)
+- [ ] Заметки: pgvector или Qdrant для такой задачи (эксплуатация, фильтры, масштаб, стоимость)
 
-Docs: [Qdrant quickstart](https://qdrant.tech/documentation/quickstart/) ·
-[Qdrant filtering](https://qdrant.tech/documentation/search/filtering/) ·
-[Qdrant hybrid queries](https://qdrant.tech/documentation/search/hybrid-queries/)
+Документация: [Qdrant: быстрый старт](https://qdrant.tech/documentation/quickstart/) ·
+[Qdrant: фильтрация](https://qdrant.tech/documentation/search/filtering/) ·
+[Qdrant: гибридные запросы](https://qdrant.tech/documentation/search/hybrid-queries/)
 
-**Done when** the API works unchanged on both backends and stage 7 metrics on both are within a
-few points of each other (or the difference is explained).
+**Готово, когда** API работает без изменений на обеих базах, а метрики этапа 7 на них
+отличаются максимум на несколько пунктов (или разница объяснена).
 
-### Stage 7. Evals
+### Этап 7. Оценка качества (evals)
 
-- [ ] `evals/questions.jsonl`: at least 30 questions over the corpus with expected documents/chunks and reference answers, including multi-hop and unanswerable ones
-- [ ] Retrieval metrics: recall@k and MRR for every search mode and chunking setting
-- [ ] Answer metrics: LLM-as-judge for faithfulness and correctness, with a fixed rubric
-- [ ] Optional: `uv add ragas` and compare its scores with your judge
-- [ ] CI runs retrieval metrics (no LLM calls) and fails below a threshold
+- [ ] `evals/questions.jsonl`: минимум 30 вопросов по корпусу с ожидаемыми документами/кусками и эталонными ответами, включая вопросы на несколько источников и вопросы без ответа в корпусе
+- [ ] Метрики поиска: recall@k (нашёлся ли нужный кусок в первых k) и MRR (насколько высоко) для каждого режима поиска и настроек нарезки
+- [ ] Метрики ответа: LLM-as-judge (другая модель оценивает ответ) на точность и опору на источники, с фиксированной рубрикой
+- [ ] По желанию: `uv add ragas` и сравнить его оценки со своим судьёй
+- [ ] CI считает метрики поиска (без вызовов LLM) и падает ниже порога
 
-Docs: [Define success criteria and build evaluations (Claude docs)](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests) ·
+Документация: [Критерии успеха и evals (документация Claude)](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests) ·
 [Ragas](https://docs.ragas.io/en/stable/) ·
 [Mean reciprocal rank](https://en.wikipedia.org/wiki/Mean_reciprocal_rank)
 
-**Done when** `uv run python -m evals.run` prints a results table, `evals/results.md` compares
-at least four configurations (chunk size, vector vs hybrid vs rerank), and every later change
-is judged by these numbers.
+**Готово, когда** `uv run python -m evals.run` печатает таблицу результатов,
+`evals/results.md` сравнивает минимум четыре конфигурации (размер куска; векторный,
+гибридный или с переранжированием поиск), и каждое следующее изменение оценивается
+этими цифрами.
 
-### Stage 8. Tool calling and a simple agent
+### Этап 8. Tool calling и простой агент
 
-- [ ] Tools: `search_docs(query, k, mode)`, `get_chunk(id)`, `list_documents()`, with strict JSON schemas
-- [ ] Agent loop with Claude (`tool_choice: auto`), a step limit, and tool errors returned as `is_error`
-- [ ] `POST /agent/ask` returns the answer and the trace of tool calls
-- [ ] Five multi-hop questions where the agent beats single-shot `/ask` (measured with stage 7)
+- [ ] Инструменты: `search_docs(query, k, mode)`, `get_chunk(id)`, `list_documents()` со строгими JSON-схемами
+- [ ] Цикл агента с Claude (`tool_choice: auto`), лимит шагов, ошибки инструментов возвращаются как `is_error`
+- [ ] `POST /agent/ask` возвращает ответ и трассу вызовов инструментов
+- [ ] Пять вопросов на несколько источников, где агент лучше одиночного `/ask` (замерить через этап 7)
 
-Docs: [Tool use overview](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) ·
-[Define tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools) ·
+Документация: [Tool use: обзор](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) ·
+[Описание инструментов](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools) ·
 [Building effective agents](https://www.anthropic.com/research/building-effective-agents) ·
-[LangChain agents](https://docs.langchain.com/oss/python/langchain/agents)
+[LangChain: агенты](https://docs.langchain.com/oss/python/langchain/agents)
 
-**Done when** the agent answers multi-hop questions that single-shot RAG misses, never loops
-past the step limit, and every run is traceable step by step.
+**Готово, когда** агент отвечает на вопросы, которые одиночный RAG пропускает, никогда
+не выходит за лимит шагов, и каждый запуск можно пройти по шагам.
 
-### Stage 9. MCP server
+### Этап 9. MCP-сервер
 
-- [ ] `uv add mcp`; `app/mcp_server.py` exposes `search_docs` as a tool and documents as resources
-- [ ] Runs over stdio and Streamable HTTP
-- [ ] Tested in MCP Inspector, then connected to Claude Code or Claude Desktop
+- [ ] `uv add mcp`; `app/mcp_server.py` отдаёт `search_docs` как инструмент, а документы — как ресурсы
+- [ ] Работает через stdio и Streamable HTTP
+- [ ] Проверен в MCP Inspector, затем подключён к Claude Code или Claude Desktop
 
-Docs: [What is MCP](https://modelcontextprotocol.io/docs/getting-started/intro) ·
+Документация: [Что такое MCP](https://modelcontextprotocol.io/docs/getting-started/intro) ·
 [Build an MCP server](https://modelcontextprotocol.io/docs/develop/build-server) ·
 [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) ·
-[MCP in Claude Code](https://code.claude.com/docs/en/mcp)
+[MCP в Claude Code](https://code.claude.com/docs/en/mcp)
 
-**Done when** Claude Code answers a question about the corpus by calling your MCP server, and the
-README shows how to connect it.
+**Готово, когда** Claude Code отвечает на вопрос по корпусу, вызывая твой MCP-сервер,
+а в README описано, как его подключить.
 
-### Stage 10. Production touches
+### Этап 10. Продакшн-штрихи
 
-- [ ] Streaming: `/ask` streams tokens over SSE
-- [ ] Caching: embedding cache, answer cache keyed by normalized question + index version; prompt caching for the system prompt
-- [ ] Observability: OpenTelemetry traces with spans for retrieve, rerank, generate; token usage and latency as span attributes; Jaeger as a compose profile
-- [ ] Load test with Locust: p50/p95 latency and error rate at a fixed RPS, before and after caching
+- [ ] Стриминг: `/ask` отдаёт токены по SSE
+- [ ] Кэш: кэш эмбеддингов, кэш ответов по нормализованному вопросу + версии индекса; prompt caching для системного промпта
+- [ ] Наблюдаемость: трейсы OpenTelemetry со спанами retrieve, rerank, generate; токены и задержка в атрибутах спанов; Jaeger как профиль compose
+- [ ] Нагрузочный тест на Locust: p50/p95 и доля ошибок при фиксированном RPS, до и после кэша
 
-Docs: [Streaming (Claude docs)](https://platform.claude.com/docs/en/build-with-claude/streaming) ·
+Документация: [Стриминг (документация Claude)](https://platform.claude.com/docs/en/build-with-claude/streaming) ·
 [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) ·
 [OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/) ·
 [Locust](https://docs.locust.io/en/stable/)
 
-**Done when** one request is visible end to end as a trace, the load-test report is in
-`docs/`, and cache hit rate and p95 latency are measured before and after.
+**Готово, когда** один запрос виден целиком как трейс, отчёт нагрузочного теста лежит
+в `docs/`, а доля попаданий в кэш и p95 замерены до и после.
 
-## Data
+## Данные
 
-The sample corpus is Python and PostgreSQL documentation plus the pgvector README, all under
-permissive licenses. Sources and licenses: [`data/README.md`](data/README.md).
+Учебный корпус — документация Python и PostgreSQL и README pgvector, всё под свободными
+лицензиями. Источники и лицензии: [`data/README.md`](data/README.md).
 
-## License
+## Лицензия
 
-[MIT](LICENSE). Files in `data/` keep their original licenses.
+[MIT](LICENSE) (текст лицензии на английском, так принято). Файлы в `data/` сохраняют
+свои исходные лицензии.

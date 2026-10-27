@@ -1,6 +1,6 @@
-"""Download the sample corpus into data/ (stdlib only, safe to re-run).
+"""Скачивает учебный корпус в data/ (только стандартная библиотека, можно запускать повторно).
 
-Usage: uv run python scripts/fetch_data.py
+Запуск: uv run python scripts/fetch_data.py
 """
 
 import html
@@ -50,12 +50,12 @@ SKIP_CLASSES = {"navheader", "navfooter", "toc"}
 
 
 class DocContentParser(HTMLParser):
-    """Collect the text inside <div id="docContent"> of a postgresql.org docs page."""
+    """Собирает текст внутри <div id="docContent"> страницы документации postgresql.org."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.depth = 0  # div nesting depth inside docContent, 0 = outside
-        self.skip_at = 0  # depth of the navigation/toc div being skipped, 0 = none
+        self.depth = 0  # глубина вложенности div внутри docContent, 0 = снаружи
+        self.skip_at = 0  # глубина пропускаемого div навигации/оглавления, 0 = нет
         self.parts: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:

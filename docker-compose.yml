@@ -16,7 +16,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # Stage 6. Start with: docker compose --profile qdrant up -d
+  # Этап 6. Запуск: docker compose --profile qdrant up -d
   qdrant:
     image: qdrant/qdrant:v1.20.0
     profiles: ["qdrant"]

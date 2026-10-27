@@ -1,17 +1,18 @@
-"""Stage 3: vector, hybrid and reranked retrieval."""
+"""Этап 3: векторный, гибридный поиск и поиск с переранжированием."""
 
 from app.schemas import SearchHit
 
 
 def reciprocal_rank_fusion(rankings: list[list[str]], k: int = 60) -> list[tuple[str, float]]:
-    """Merge several ranked lists of chunk ids into one, best first.
+    """Слить несколько ранжированных списков id кусков в один, лучшие первыми.
 
-    TODO(stage 3): score(id) = sum(1 / (k + rank)) over every list that contains the id.
+    TODO(этап 3): score(id) = сумма 1 / (k + rank) по всем спискам, где есть этот id.
     """
     raise NotImplementedError
 
 
 def search(query: str, k: int, mode: str) -> list[SearchHit]:
-    """TODO(stage 3): "vector" -> cosine over pgvector; "hybrid" -> Postgres full-text
-    search + vector merged with RRF; "rerank" -> hybrid top-50 re-scored by a cross-encoder."""
+    """TODO(этап 3): "vector" — косинус в pgvector; "hybrid" — полнотекстовый поиск
+    Postgres + векторный, слитые через RRF; "rerank" — top-50 гибридного поиска,
+    пересортированные мультиязычным cross-encoder."""
     raise NotImplementedError

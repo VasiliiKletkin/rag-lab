@@ -1,7 +1,7 @@
-# Learning log
+# Дневник обучения
 
-One short entry per roadmap stage: what was built, the numbers measured, what surprised you,
-what you would do differently in production. These notes are the raw material for
-interview stories.
+Короткая запись на каждый этап плана: что сделал, какие цифры получил, что удивило,
+что сделал бы иначе в продакшне. Из этих записей потом получаются истории
+для собеседований.
 
-## Stage 0: Environment
+## Этап 0: окружение
