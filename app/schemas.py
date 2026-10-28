@@ -3,13 +3,11 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class IngestRequest(BaseModel):
-    path: str = Field("data", description="Файл или папка для загрузки")
-
-
 class IngestResponse(BaseModel):
-    documents: int
-    chunks: int
+    written: int = Field(description="Новые и изменённые документы")
+    unchanged: int = Field(description="Документы без изменений")
+    deleted: int = Field(description="Документы, которых больше нет в manifest")
+    chunks: int = Field(description="Сколько кусков записано за этот запуск")
 
 
 class SearchRequest(BaseModel):

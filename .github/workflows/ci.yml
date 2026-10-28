@@ -16,6 +16,20 @@ jobs:
   lint-test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rag -d rag"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.3.2
@@ -28,4 +42,6 @@ jobs:
       - name: Форматирование ruff
         run: uv run ruff format --check .
       - name: Тесты
+        env:
+          REQUIRE_DB: "1"  # без базы интеграционные тесты должны падать, а не пропускаться
         run: uv run pytest -q

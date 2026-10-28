@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,7 +16,8 @@ class Settings(BaseSettings):
     embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
 
-    # Этап 1: нарезка на куски
+    # Этап 1: корпус и нарезка на куски
+    data_dir: Path = Path("data")
     chunk_size: int = 800
     chunk_overlap: int = 120
 

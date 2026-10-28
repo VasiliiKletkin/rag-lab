@@ -1,13 +1,17 @@
 import logging
+from dataclasses import asdict
 
+import psycopg
 from fastapi import FastAPI, HTTPException, status
 
 from app import __version__
-from app.db import pgvector_version
+from app.config import get_settings
+from app.db import connect, pgvector_version
+from app.rag.ingest import ingest_documents
+from app.rag.loader import load_corpus
 from app.schemas import (
     AskRequest,
     AskResponse,
-    IngestRequest,
     IngestResponse,
     SearchRequest,
     SearchResponse,
@@ -49,12 +53,22 @@ def ready() -> dict[str, str]:
 
 
 @app.post("/ingest")
-def ingest(req: IngestRequest) -> IngestResponse:
-    # TODO(этап 1): прочитать файлы из req.path, нарезать на куски (app/rag/chunking.py),
-    #   сохранить документы и куски в Postgres; повторная загрузка неизменённых файлов
-    #   ничего не меняет.
-    # TODO(этап 2): посчитать эмбеддинги кусков (app/rag/embeddings.py) и записать в pgvector.
-    raise not_implemented("этапы 1-2")
+def ingest() -> IngestResponse:
+    """Синхронизировать базу с корпусом из настроек (DATA_DIR/manifest.json).
+
+    Путь к папке намеренно не принимается из запроса: клиент API не должен выбирать,
+    какие файлы сервера читать.
+    """
+    settings = get_settings()
+    documents = load_corpus(settings.data_dir)
+    try:
+        with connect() as conn:
+            stats = ingest_documents(conn, documents, settings.chunk_size, settings.chunk_overlap)
+    except psycopg.OperationalError as exc:
+        logger.warning("загрузка не прошла: %s", exc)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
+    # TODO(этап 2): посчитать эмбеддинги новых кусков и записать в pgvector.
+    return IngestResponse(**asdict(stats))
 
 
 @app.post("/search")

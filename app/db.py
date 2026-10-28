@@ -3,9 +3,14 @@ import psycopg
 from app.config import get_settings
 
 
+def connect() -> psycopg.Connection:
+    """Новое подключение к Postgres. Транзакции открываем явно через `conn.transaction()`."""
+    return psycopg.connect(get_settings().database_url, autocommit=True, connect_timeout=3)
+
+
 def pgvector_version() -> str | None:
     """Версия установленного pgvector или None, если расширения нет."""
-    with psycopg.connect(get_settings().database_url, connect_timeout=3) as conn:
+    with connect() as conn:
         row = conn.execute(
             "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
         ).fetchone()

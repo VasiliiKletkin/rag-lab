@@ -10,7 +10,7 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этап 0 (каркас). `/health` и `/ready` работают; `/ingest`, `/search` и `/ask`
+**Статус:** этап 1. `/ingest` загружает корпус в Postgres (идемпотентно); `/search` и `/ask`
 отвечают `501`, пока не сделаны их этапы.
 
 ## Стек
@@ -62,6 +62,15 @@ uv run uvicorn app.main:app --reload
 ```bash
 curl localhost:8000/health      # {"status":"ok","version":"0.1.0"}
 curl localhost:8000/ready       # {"status":"ready","pgvector":"0.8.7"}
+curl -X POST localhost:8000/ingest
+# {"written":5,"unchanged":0,"deleted":0,"chunks":206}, повторный вызов: written 0, unchanged 5
+```
+
+Скрипты из `db/init/` выполняются только при создании пустой базы. Если база создана раньше,
+новый скрипт применяется вручную:
+
+```bash
+docker compose exec -T postgres psql -U rag -d rag < db/init/002_schema.sql
 ```
 
 Проверки (те же, что запускает CI):
@@ -69,6 +78,9 @@ curl localhost:8000/ready       # {"status":"ready","pgvector":"0.8.7"}
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run pytest
 ```
+
+Интеграционные тесты создают отдельную базу `rag_test` в том же Postgres. Если Postgres
+не запущен, они пропускаются; в CI они обязательны.
 
 Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 
@@ -80,9 +92,13 @@ app/
   config.py        настройки из переменных окружения и .env
   db.py            работа с Postgres
   schemas.py       модели запросов и ответов (контракт API)
-  rag/             нарезка, эмбеддинги, хранилище, поиск, генерация (заготовки)
+  rag/
+    loader.py      чтение корпуса по manifest.json
+    chunking.py    нарезка на куски
+    ingest.py      идемпотентная загрузка документов и кусков в Postgres
+    embeddings.py, store.py, retrieval.py, generation.py   заготовки этапов 2–4
 data/              учебный корпус + manifest.json (см. data/README.md)
-db/init/           SQL, который выполняется при первом старте Postgres
+db/init/           SQL, который выполняется при первом старте Postgres (расширение, схема)
 evals/             вопросы для оценки качества (формат в questions.example.jsonl)
 scripts/           fetch_data.py скачивает корпус
 docs/notes.md      дневник обучения, запись на каждый этап
@@ -101,9 +117,9 @@ tests/
 - [x] Проект на uv, ruff, pytest, GitHub Actions
 - [x] `docker compose` с Postgres 16 + pgvector, healthcheck, init-скрипт
 - [x] FastAPI с `/health` (жив ли процесс) и `/ready` (доступны ли Postgres и pgvector)
-- [ ] Запустить самому: `docker compose up -d`, `/ready` возвращает версию pgvector
-- [ ] Подключиться через `psql` и выполнить `\dx`; построчно разобрать `docker-compose.yml` и `db/init/`
-- [ ] CI зелёный на GitHub
+- [x] Запустить самому: `docker compose up -d`, `/ready` возвращает версию pgvector
+- [x] Подключиться через `psql` и выполнить `\dx`; построчно разобрать `docker-compose.yml` и `db/init/`
+- [x] CI зелёный на GitHub
 
 Документация: [uv: проекты](https://docs.astral.sh/uv/concepts/projects/) ·
 [Docker Compose](https://docs.docker.com/compose/) ·
@@ -115,10 +131,11 @@ tests/
 
 ### Этап 1. Загрузка и нарезка документов
 
-- [ ] Загрузчик `.md`, `.rst`, `.txt`, который сохраняет метаданные (`file`, `title`, `url` из `data/manifest.json`)
-- [ ] Нарезка фиксированного размера с перекрытием в `app/rag/chunking.py`, потом рекурсивная (заголовки → абзацы → предложения)
-- [ ] Таблицы `documents` и `chunks` (SQL-миграция в `db/`), хеш содержимого у каждого документа
-- [ ] `POST /ingest` сохраняет документы и куски; юнит-тесты на нарезку
+- [x] Загрузчик `.md`, `.rst`, `.txt`, который сохраняет метаданные (`file`, `title`, `url` из `data/manifest.json`)
+- [x] Нарезка фиксированного размера с перекрытием в `app/rag/chunking.py`
+- [ ] Рекурсивная нарезка (заголовки → абзацы → предложения), не резать внутри блоков кода
+- [x] Таблицы `documents` и `chunks` (`db/init/002_schema.sql`), хеш содержимого у каждого документа
+- [x] `POST /ingest` сохраняет документы и куски идемпотентно; юнит-тесты на нарезку, интеграционные на загрузку
 
 Документация: [Contextual Retrieval (Anthropic)](https://www.anthropic.com/research/contextual-retrieval) ·
 [LangChain: text splitters](https://docs.langchain.com/oss/python/integrations/splitters) ·
