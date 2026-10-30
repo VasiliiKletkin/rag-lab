@@ -102,7 +102,9 @@ class ClaudeGenerator:
 @lru_cache
 def get_generator() -> Generator:
     settings = get_settings()
-    if settings.anthropic_api_key is None:
+    # в .env.example ключ пустой: пустая строка — это тоже «не задан»
+    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
+    if not key:
         raise GenerationError("ANTHROPIC_API_KEY не задан", retryable=False)
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
+    client = anthropic.Anthropic(api_key=key)
     return ClaudeGenerator(client, settings.llm_model)
