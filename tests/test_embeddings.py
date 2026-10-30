@@ -47,6 +47,7 @@ def test_rewritten_document_loses_old_vectors(db: psycopg.Connection) -> None:
     assert db.execute("SELECT count(*) FROM chunks WHERE embedding IS NULL").fetchone()[0] == 3
 
 
+@pytest.mark.slow
 def test_dimension_mismatch_is_rejected() -> None:
     with pytest.raises(ValueError):
         LocalEmbedder("intfloat/multilingual-e5-small", expected_dim=768)
