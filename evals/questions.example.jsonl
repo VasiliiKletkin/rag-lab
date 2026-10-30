@@ -1,3 +1,0 @@
-{"id": "q001", "question": "Какие типы индексов поддерживает pgvector для приближённого поиска ближайших соседей?", "expected_documents": ["pgvector-readme.md"], "reference_answer": "HNSW и IVFFlat."}
-{"id": "q002", "question": "Что делает asyncio.TaskGroup, если одна из его задач падает с исключением?", "expected_documents": ["python-3.14-asyncio-task.rst"], "reference_answer": "Отменяет остальные задачи группы, а исключения поднимаются вместе как ExceptionGroup при выходе из блока async with."}
-{"id": "q003", "question": "Какой тип индекса PostgreSQL создаёт команда CREATE INDEX по умолчанию?", "expected_documents": ["postgresql-16-index-types.txt"], "reference_answer": "B-tree."}
