@@ -8,6 +8,7 @@ from app import __version__
 from app.config import get_settings
 from app.db import connect, pgvector_version
 from app.rag.embeddings import get_embedder
+from app.rag.generation import GenerationError, get_generator
 from app.rag.ingest import embed_missing, ingest_documents
 from app.rag.loader import load_corpus
 from app.rag.retrieval import search as run_search
@@ -26,13 +27,6 @@ app = FastAPI(
     version=__version__,
     description="Вопросы и ответы по документам: RAG на FastAPI, pgvector и Claude.",
 )
-
-
-def not_implemented(stage: str) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=f"Ещё не реализовано, см. план в README: {stage}",
-    )
 
 
 @app.get("/health")
@@ -86,6 +80,16 @@ def search(req: SearchRequest) -> SearchResponse:
 
 @app.post("/ask")
 def ask(req: AskRequest) -> AskResponse:
-    # TODO(этап 4): найти top-k кусков, передать их Claude как документы,
-    #   вернуть ответ с цитатами из исходных кусков.
-    raise not_implemented("этап 4")
+    """Найти top-k кусков (режим rerank) и ответить по ним с цитатами."""
+    try:
+        with connect() as conn:
+            hits = run_search(conn, get_embedder(), req.question, req.k, "rerank")
+        return get_generator().answer(req.question, hits)
+    except psycopg.OperationalError as exc:
+        logger.warning("поиск не прошёл: %s", exc)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
+    except GenerationError as exc:
+        # 502/503 — проблема у модели, не наш 500
+        code = status.HTTP_503_SERVICE_UNAVAILABLE if exc.retryable else status.HTTP_502_BAD_GATEWAY
+        logger.warning("генерация не прошла: %s", exc)
+        raise HTTPException(code, str(exc)) from exc

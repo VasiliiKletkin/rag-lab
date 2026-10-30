@@ -10,8 +10,9 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этап 3. `/ingest` загружает корпус и считает векторы; `/search` ищет в трёх режимах
-(vector, hybrid, rerank); `/ask` отвечает `501`, пока не сделан этап 4.
+**Статус:** этап 4. `/ingest` загружает корпус и считает векторы; `/search` ищет в трёх режимах
+(vector, hybrid, rerank); `/ask` отвечает через Claude с цитатами. Без `ANTHROPIC_API_KEY`
+`/ask` отвечает `502`, остальное работает локально.
 
 ## Стек
 
@@ -102,7 +103,8 @@ app/
     ingest.py      идемпотентная загрузка документов и кусков, расчёт недостающих векторов
     embeddings.py  LocalEmbedder: sentence-transformers, префиксы query:/passage:
     retrieval.py   векторный и полнотекстовый поиск, RRF, cross-encoder
-    store.py, generation.py   заготовки этапов 4 и 6
+    generation.py  ClaudeGenerator: куски как document-блоки, цитаты, обработка ошибок API
+    store.py       заготовка этапа 6
 alembic/           миграции Alembic (env.py берёт DATABASE_URL из настроек)
 data/              учебный корпус + manifest.json (см. data/README.md)
 evals/             вопросы для оценки качества (формат в questions.example.jsonl)
@@ -189,11 +191,12 @@ tests/
 
 ### Этап 4. Генерация ответа через Claude
 
-- [ ] Задать `ANTHROPIC_API_KEY`; клиент из официального SDK `anthropic`
-- [ ] Каждый найденный кусок передаётся как content block типа `document` с включёнными цитатами; модель из `LLM_MODEL` (`claude-sonnet-5-5`)
-- [ ] Ответ на языке вопроса (на русском), цитаты — дословно из английского источника
-- [ ] `POST /ask` возвращает `answer` + `citations` (документ, id куска, цитата)
-- [ ] Модель говорит «не знаю», если в контексте нет ответа; обработка `stop_reason` (`max_tokens`, `refusal`); логирование расхода токенов
+- [x] Клиент из официального SDK `anthropic`; без `ANTHROPIC_API_KEY` `/ask` честно отвечает 502
+- [x] Каждый найденный кусок передаётся как content block типа `document` с включёнными цитатами; модель из `LLM_MODEL` (`claude-sonnet-5-5`)
+- [x] Ответ на языке вопроса (на русском), цитаты — дословно из английского источника
+- [x] `POST /ask` возвращает `answer` + `citations` (документ, id куска, цитата)
+- [x] Модель говорит «не знаю», если в контексте нет ответа; обработка `stop_reason` (`max_tokens`, `refusal`); логирование расхода токенов; 429/5xx → 503, остальное → 502
+- [ ] Живая проверка с ключом: три вопроса из `evals/questions.example.jsonl` и вопрос не по теме (пока только тесты с заглушкой API)
 
 Документация: [Messages API](https://platform.claude.com/docs/en/build-with-claude/working-with-messages) ·
 [Citations](https://platform.claude.com/docs/en/build-with-claude/citations) ·
