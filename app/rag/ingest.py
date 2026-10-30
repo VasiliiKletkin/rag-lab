@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import psycopg
 
 from app.rag.chunking import split_text
+from app.rag.embeddings import Embedder
 from app.rag.loader import SourceDocument
 
 # Вставить новый документ или обновить изменившийся. Если хеш и настройки нарезки
@@ -78,3 +79,33 @@ def ingest_documents(
         ).fetchall()
     stats.deleted = len(deleted)
     return stats
+
+
+SELECT_UNEMBEDDED = """
+SELECT id, content FROM chunks
+WHERE embedding IS NULL OR embedding_model IS DISTINCT FROM %s
+ORDER BY id
+"""
+
+UPDATE_EMBEDDING = "UPDATE chunks SET embedding = %s, embedding_model = %s WHERE id = %s"
+
+
+def embed_missing(conn: psycopg.Connection, embedder: Embedder, batch_size: int = 64) -> int:
+    """Посчитать векторы кускам, у которых их нет или они от другой модели.
+
+    Пачка кусков считается и пишется в одной транзакции: после падения посередине
+    уже посчитанные пачки остаются, повторный запуск продолжит с оставшихся.
+    """
+    rows = conn.execute(SELECT_UNEMBEDDED, (embedder.name,)).fetchall()
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i : i + batch_size]
+        vectors = embedder.embed_documents([content for _, content in batch])
+        with conn.transaction(), conn.cursor() as cur:
+            cur.executemany(
+                UPDATE_EMBEDDING,
+                [
+                    (vec, embedder.name, chunk_id)
+                    for (chunk_id, _), vec in zip(batch, vectors, strict=True)
+                ],
+            )
+    return len(rows)

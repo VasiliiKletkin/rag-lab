@@ -44,4 +44,4 @@ jobs:
       - name: Тесты
         env:
           REQUIRE_DB: "1"  # без базы интеграционные тесты должны падать, а не пропускаться
-        run: uv run pytest -q
+        run: uv run pytest -q -m "not slow"  # настоящая модель в CI не качается

@@ -1,11 +1,14 @@
 import psycopg
+from pgvector.psycopg import register_vector
 
 from app.config import get_settings
 
 
 def connect() -> psycopg.Connection:
     """Новое подключение к Postgres. Транзакции открываем явно через `conn.transaction()`."""
-    return psycopg.connect(get_settings().database_url, autocommit=True, connect_timeout=3)
+    conn = psycopg.connect(get_settings().database_url, autocommit=True, connect_timeout=3)
+    register_vector(conn)  # list[float] <-> vector без ручной сериализации
+    return conn
 
 
 def pgvector_version() -> str | None:

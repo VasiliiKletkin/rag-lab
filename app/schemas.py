@@ -8,6 +8,7 @@ class IngestResponse(BaseModel):
     unchanged: int = Field(description="Документы без изменений")
     deleted: int = Field(description="Документы, которых больше нет в manifest")
     chunks: int = Field(description="Сколько кусков записано за этот запуск")
+    embedded: int = Field(description="Скольким кускам посчитаны векторы")
 
 
 class SearchRequest(BaseModel):

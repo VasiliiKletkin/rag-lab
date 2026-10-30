@@ -14,6 +14,7 @@ dependencies = [
     "pgvector>=0.5.1",
     "psycopg[binary,pool]>=3.3.6",
     "pydantic-settings>=2.16.1",
+    "sentence-transformers>=6.2.0",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -37,3 +38,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = ["slow: тесты, которые грузят настоящую модель"]

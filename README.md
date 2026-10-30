@@ -10,8 +10,8 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этап 1. `/ingest` загружает корпус в Postgres (идемпотентно); `/search` и `/ask`
-отвечают `501`, пока не сделаны их этапы.
+**Статус:** этап 2. `/ingest` загружает корпус в Postgres и считает векторы кусков (pgvector,
+HNSW); `/search` и `/ask` отвечают `501`, пока не сделаны их этапы.
 
 ## Стек
 
@@ -63,14 +63,15 @@ uv run uvicorn app.main:app --reload
 curl localhost:8000/health      # {"status":"ok","version":"0.1.0"}
 curl localhost:8000/ready       # {"status":"ready","pgvector":"0.8.7"}
 curl -X POST localhost:8000/ingest
-# {"written":5,"unchanged":0,"deleted":0,"chunks":206}, повторный вызов: written 0, unchanged 5
+# {"written":5,"unchanged":0,"deleted":0,"chunks":206,"embedded":206}
+# повторный вызов: written 0, unchanged 5, embedded 0. Первый запуск качает модель (~500 МБ).
 ```
 
 Скрипты из `db/init/` выполняются только при создании пустой базы. Если база создана раньше,
 новый скрипт применяется вручную:
 
 ```bash
-docker compose exec -T postgres psql -U rag -d rag < db/init/002_schema.sql
+docker compose exec -T postgres psql -U rag -d rag < db/init/003_embeddings.sql
 ```
 
 Проверки (те же, что запускает CI):
@@ -95,8 +96,9 @@ app/
   rag/
     loader.py      чтение корпуса по manifest.json
     chunking.py    нарезка на куски
-    ingest.py      идемпотентная загрузка документов и кусков в Postgres
-    embeddings.py, store.py, retrieval.py, generation.py   заготовки этапов 2–4
+    ingest.py      идемпотентная загрузка документов и кусков, расчёт недостающих векторов
+    embeddings.py  LocalEmbedder: sentence-transformers, префиксы query:/passage:
+    store.py, retrieval.py, generation.py   заготовки этапов 3–4
 data/              учебный корпус + manifest.json (см. data/README.md)
 db/init/           SQL, который выполняется при первом старте Postgres (расширение, схема)
 evals/             вопросы для оценки качества (формат в questions.example.jsonl)
@@ -148,10 +150,10 @@ tests/
 
 ### Этап 2. Эмбеддинги и pgvector
 
-- [ ] `uv add sentence-transformers`; `LocalEmbedder` (`intfloat/multilingual-e5-small`, 384 измерения) за протоколом `Embedder`
-- [ ] У e5 есть правило: к вопросам добавлять префикс `query: `, к кускам документов — `passage: `
-- [ ] Колонка `chunks.embedding vector(384)` + индекс HNSW с `vector_cosine_ops`
-- [ ] Эмбеддинги считаются пачками; пересчитываются только новые и изменённые куски
+- [x] `uv add sentence-transformers`; `LocalEmbedder` (`intfloat/multilingual-e5-small`, 384 измерения) за протоколом `Embedder`
+- [x] У e5 есть правило: к вопросам добавлять префикс `query: `, к кускам документов — `passage: `
+- [x] Колонка `chunks.embedding vector(384)` + индекс HNSW с `vector_cosine_ops` (`db/init/003_embeddings.sql`)
+- [x] Эмбеддинги считаются пачками; пересчитываются только новые куски и куски от другой модели (`embedding_model` хранится рядом с вектором)
 - [ ] По желанию: эмбеддинги через API (например, Voyage AI) за тем же протоколом; сравнить на этапе 7
 
 Документация: [Sentence Transformers: быстрый старт](https://sbert.net/docs/quickstart.html) ·

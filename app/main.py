@@ -7,7 +7,8 @@ from fastapi import FastAPI, HTTPException, status
 from app import __version__
 from app.config import get_settings
 from app.db import connect, pgvector_version
-from app.rag.ingest import ingest_documents
+from app.rag.embeddings import get_embedder
+from app.rag.ingest import embed_missing, ingest_documents
 from app.rag.loader import load_corpus
 from app.schemas import (
     AskRequest,
@@ -64,11 +65,11 @@ def ingest() -> IngestResponse:
     try:
         with connect() as conn:
             stats = ingest_documents(conn, documents, settings.chunk_size, settings.chunk_overlap)
+            embedded = embed_missing(conn, get_embedder())
     except psycopg.OperationalError as exc:
         logger.warning("загрузка не прошла: %s", exc)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
-    # TODO(этап 2): посчитать эмбеддинги новых кусков и записать в pgvector.
-    return IngestResponse(**asdict(stats))
+    return IngestResponse(**asdict(stats), embedded=embedded)
 
 
 @app.post("/search")
