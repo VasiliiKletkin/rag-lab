@@ -8,6 +8,7 @@ from app import __version__
 from app.config import get_settings
 from app.db import connect, pgvector_version
 from app.rag.embeddings import get_embedder
+from app.rag.frameworks import langchain_chain, llamaindex_engine
 from app.rag.generation import GenerationError, get_generator
 from app.rag.ingest import embed_missing, ingest_documents
 from app.rag.loader import load_corpus
@@ -83,6 +84,14 @@ def ask(req: AskRequest) -> AskResponse:
     """Найти top-k кусков (режим rerank) и ответить по ним с цитатами."""
     try:
         with connect() as conn:
+            if req.engine == "langchain":
+                return langchain_chain.ask(
+                    conn, get_embedder(), langchain_chain.get_llm(), req.question, req.k
+                )
+            if req.engine == "llamaindex":
+                return llamaindex_engine.ask(
+                    conn, get_embedder(), llamaindex_engine.get_llm(), req.question, req.k
+                )
             hits = run_search(conn, get_embedder(), req.question, req.k, "rerank")
         return get_generator().answer(req.question, hits)
     except psycopg.OperationalError as exc:

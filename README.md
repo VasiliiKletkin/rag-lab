@@ -10,9 +10,10 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этапы 0–4 и 7 (метрики поиска). `/ingest` загружает корпус и считает векторы;
+**Статус:** этапы 0–5 и 7 (метрики поиска). `/ingest` загружает корпус и считает векторы;
 `/search` ищет в трёх режимах (vector, hybrid, rerank); `/ask` отвечает через Claude с цитатами
-(без `ANTHROPIC_API_KEY` — `502`, остальное работает локально). `uv run python -m evals.run`
+(без `ANTHROPIC_API_KEY` — `502`, остальное работает локально), `engine=langchain|llamaindex`
+делает то же на фреймворках (сравнение в [`docs/comparison.md`](docs/comparison.md)). `uv run python -m evals.run`
 считает recall@5 и MRR; результаты в [`evals/results.md`](evals/results.md).
 
 ## Стек
@@ -105,6 +106,7 @@ app/
     embeddings.py  LocalEmbedder: sentence-transformers, префиксы query:/passage:
     retrieval.py   векторный и полнотекстовый поиск, RRF, cross-encoder
     generation.py  ClaudeGenerator: куски как document-блоки, цитаты, обработка ошибок API
+    frameworks/    тот же RAG на LangChain (LCEL) и LlamaIndex поверх нашего поиска
     store.py       заготовка этапа 6
 alembic/           миграции Alembic (env.py берёт DATABASE_URL из настроек)
 data/              учебный корпус + manifest.json (см. data/README.md)
@@ -210,10 +212,11 @@ HTTP-ошибки (429 и 5xx от Claude — это не твой 500).
 
 ### Этап 5. Тот же пайплайн на LangChain и LlamaIndex
 
-- [ ] LangChain: хранилище `PGVector` + `ChatAnthropic`, цепочка поиска на LCEL (runnables)
-- [ ] LlamaIndex: `PGVectorStore` + Anthropic LLM, query engine поверх `VectorStoreIndex`
-- [ ] `POST /ask` принимает `engine=plain|langchain|llamaindex`, формат ответа одинаковый
-- [ ] `docs/comparison.md`: строки кода, задержка, что каждый фреймворк прячет, качество поиска (перемерить после этапа 7)
+- [x] LangChain: наш поиск как `BaseRetriever` + `ChatAnthropic`, цепочка на LCEL (runnables)
+- [x] LlamaIndex: наш поиск как `BaseRetriever` + Anthropic LLM, `RetrieverQueryEngine`
+- [ ] Их собственные хранилища (`PGVector`, `PGVectorStore`) и сплиттеры — отдельным экспериментом через evals
+- [x] `POST /ask` принимает `engine=plain|langchain|llamaindex`, формат ответа одинаковый
+- [x] `docs/comparison.md`: строки кода, цитаты, что каждый фреймворк прячет, рекомендация
 
 Документация: [LangChain: обзор](https://docs.langchain.com/oss/python/langchain/overview) ·
 [LangChain: runnables (LCEL)](https://reference.langchain.com/python/langchain-core/runnables) ·

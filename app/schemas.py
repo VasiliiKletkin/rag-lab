@@ -31,6 +31,10 @@ class SearchResponse(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(description="Вопрос по корпусу документов")
     k: int = Field(5, ge=1, le=20, description="Сколько кусков дать модели как контекст")
+    engine: Literal["plain", "langchain", "llamaindex"] = Field(
+        "plain",
+        description="plain — свой код и Claude API; langchain / llamaindex — то же на фреймворке",
+    )
 
 
 class Citation(BaseModel):
