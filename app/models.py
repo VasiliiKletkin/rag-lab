@@ -6,6 +6,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Identity,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 EMBEDDING_DIM = 384
@@ -61,6 +63,10 @@ class Chunk(Base):
     # несравнимы, даже если размерность совпадает.
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
     embedding_model: Mapped[str | None] = mapped_column(Text)
+    # Этап 3: лексический поиск. Колонка считается базой из content, вручную не пишется.
+    tsv: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True)
+    )
 
     document: Mapped[Document] = relationship(back_populates="chunks")
 
@@ -75,6 +81,7 @@ class Chunk(Base):
             "(embedding IS NULL) = (embedding_model IS NULL)", name="chunks_embedding_with_model"
         ),
         # HNSW по косинусному расстоянию: оператор <=> в запросах
+        Index("chunks_tsv_gin", "tsv", postgresql_using="gin"),
         Index(
             "chunks_embedding_hnsw",
             "embedding",

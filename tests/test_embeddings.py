@@ -64,3 +64,20 @@ def test_real_model_cross_language() -> None:
     assert len(query) == 384
     dot = lambda a, b: sum(x * y for x, y in zip(a, b, strict=True))  # noqa: E731
     assert dot(query, good) > dot(query, bad)
+
+
+@pytest.mark.slow
+def test_real_reranker_separates_relevant_from_offtopic() -> None:
+    from app.rag.retrieval import get_reranker
+    from app.schemas import SearchHit
+
+    hits = [
+        SearchHit(
+            chunk_id="1", document="d", text="Supported index types are HNSW and IVFFlat.", score=0
+        ),
+        SearchHit(chunk_id="2", document="d", text="Use a list as a stack with append().", score=0),
+    ]
+    ranked = get_reranker().rerank("Какие типы индексов поддерживает pgvector?", hits)
+
+    assert ranked[0].chunk_id == "1"
+    assert ranked[0].score > 0 > ranked[1].score

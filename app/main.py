@@ -10,6 +10,7 @@ from app.db import connect, pgvector_version
 from app.rag.embeddings import get_embedder
 from app.rag.ingest import embed_missing, ingest_documents
 from app.rag.loader import load_corpus
+from app.rag.retrieval import search as run_search
 from app.schemas import (
     AskRequest,
     AskResponse,
@@ -74,9 +75,13 @@ def ingest() -> IngestResponse:
 
 @app.post("/search")
 def search(req: SearchRequest) -> SearchResponse:
-    # TODO(этап 3): векторный поиск (косинус) -> гибридный (полнотекстовый + векторный, RRF)
-    #   -> переранжирование.
-    raise not_implemented("этап 3")
+    try:
+        with connect() as conn:
+            hits = run_search(conn, get_embedder(), req.query, req.k, req.mode)
+    except psycopg.OperationalError as exc:
+        logger.warning("поиск не прошёл: %s", exc)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
+    return SearchResponse(hits=hits)
 
 
 @app.post("/ask")

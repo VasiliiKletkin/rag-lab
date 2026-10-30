@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     chunk_size: int = 800
     chunk_overlap: int = 120
 
-    # Этап 3: поиск
+    # Этап 3: поиск. Сколько кандидатов берём из каждого канала до слияния и переранжирования.
     top_k: int = 5
+    candidates: int = 30
+    reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
     # Этап 4: генерация
     anthropic_api_key: SecretStr | None = None

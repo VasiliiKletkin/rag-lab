@@ -10,8 +10,8 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этап 2. `/ingest` загружает корпус в Postgres и считает векторы кусков (pgvector,
-HNSW); `/search` и `/ask` отвечают `501`, пока не сделаны их этапы.
+**Статус:** этап 3. `/ingest` загружает корпус и считает векторы; `/search` ищет в трёх режимах
+(vector, hybrid, rerank); `/ask` отвечает `501`, пока не сделан этап 4.
 
 ## Стек
 
@@ -66,6 +66,8 @@ curl localhost:8000/ready       # {"status":"ready","pgvector":"0.8.7"}
 curl -X POST localhost:8000/ingest
 # {"written":5,"unchanged":0,"deleted":0,"chunks":206,"embedded":206}
 # повторный вызов: written 0, unchanged 5, embedded 0. Первый запуск качает модель (~500 МБ).
+curl -X POST localhost:8000/search -H 'content-type: application/json' \
+  -d '{"query": "Какие типы индексов поддерживает pgvector?", "k": 5, "mode": "rerank"}'
 ```
 
 Схема описана в `app/models.py`; после изменения модели миграция генерируется и применяется так:
@@ -99,7 +101,8 @@ app/
     chunking.py    нарезка на куски
     ingest.py      идемпотентная загрузка документов и кусков, расчёт недостающих векторов
     embeddings.py  LocalEmbedder: sentence-transformers, префиксы query:/passage:
-    store.py, retrieval.py, generation.py   заготовки этапов 3–4
+    retrieval.py   векторный и полнотекстовый поиск, RRF, cross-encoder
+    store.py, generation.py   заготовки этапов 4 и 6
 alembic/           миграции Alembic (env.py берёт DATABASE_URL из настроек)
 data/              учебный корпус + manifest.json (см. data/README.md)
 evals/             вопросы для оценки качества (формат в questions.example.jsonl)
@@ -167,9 +170,9 @@ tests/
 
 ### Этап 3. Поиск: векторный, гибридный, с переранжированием
 
-- [ ] `mode=vector`: косинусное расстояние (`<=>`) в pgvector, top-k с оценками
-- [ ] `mode=hybrid`: полнотекстовый поиск Postgres (`tsvector`, `ts_rank_cd`) + векторный, слияние через Reciprocal Rank Fusion (RRF)
-- [ ] `mode=rerank`: top-50 гибридного поиска пересортировывает мультиязычный cross-encoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, посильнее — `BAAI/bge-reranker-v2-m3`)
+- [x] `mode=vector`: косинусное расстояние (`<=>`) в pgvector, top-k с оценками
+- [x] `mode=hybrid`: полнотекстовый поиск Postgres (`tsvector`, `ts_rank_cd`) + векторный, слияние через Reciprocal Rank Fusion (RRF)
+- [x] `mode=rerank`: top-30 гибридного поиска пересортировывает мультиязычный cross-encoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, посильнее — `BAAI/bge-reranker-v2-m3`)
 - [ ] `EXPLAIN ANALYZE` показывает, что используется индекс HNSW; медианная задержка (p50) каждого режима в `docs/notes.md`
 
 Документация: [PostgreSQL: ранжирование результатов поиска](https://www.postgresql.org/docs/16/textsearch-controls.html) ·
