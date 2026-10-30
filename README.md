@@ -18,7 +18,7 @@ HNSW); `/search` и `/ask` отвечают `501`, пока не сделаны 
 | Слой | Выбор |
 |---|---|
 | API | Python 3.12, FastAPI, Pydantic Settings |
-| Хранилище | PostgreSQL 16 + pgvector 0.8.7 (Docker), Qdrant 1.20 (этап 6) |
+| Хранилище | PostgreSQL 16 + pgvector 0.8.7 (Docker), схема на SQLAlchemy 2.0 + миграции Alembic, Qdrant 1.20 (этап 6) |
 | Эмбеддинги | sentence-transformers локально, мультиязычная модель `intfloat/multilingual-e5-small` (этап 2); API-эмбеддинги по желанию |
 | LLM | Claude через официальный Python SDK `anthropic`, модель по умолчанию `claude-sonnet-5-5` |
 | Фреймворки | LangChain (LCEL) и LlamaIndex для сравнения (этап 5) |
@@ -56,6 +56,7 @@ flowchart LR
 cp .env.example .env
 docker compose up -d            # Postgres 16 + pgvector, ждёт healthcheck
 uv sync                         # создаёт .venv по uv.lock
+uv run alembic upgrade head     # схема базы (расширение vector, таблицы, индекс HNSW)
 uv run uvicorn app.main:app --reload
 ```
 
@@ -67,11 +68,10 @@ curl -X POST localhost:8000/ingest
 # повторный вызов: written 0, unchanged 5, embedded 0. Первый запуск качает модель (~500 МБ).
 ```
 
-Скрипты из `db/init/` выполняются только при создании пустой базы. Если база создана раньше,
-новый скрипт применяется вручную:
+Схема описана в `app/models.py`; после изменения модели миграция генерируется и применяется так:
 
 ```bash
-docker compose exec -T postgres psql -U rag -d rag < db/init/003_embeddings.sql
+uv run alembic revision --autogenerate -m "что изменилось" && uv run alembic upgrade head
 ```
 
 Проверки (те же, что запускает CI):
@@ -80,8 +80,8 @@ docker compose exec -T postgres psql -U rag -d rag < db/init/003_embeddings.sql
 uv run ruff check . && uv run ruff format --check . && uv run pytest
 ```
 
-Интеграционные тесты создают отдельную базу `rag_test` в том же Postgres. Если Postgres
-не запущен, они пропускаются; в CI они обязательны.
+Интеграционные тесты создают отдельную базу `rag_test` в том же Postgres и накатывают на неё
+миграции. Если Postgres не запущен, они пропускаются; в CI они обязательны.
 
 Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 
@@ -91,7 +91,8 @@ Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 app/
   main.py          FastAPI: /health, /ready, /ingest, /search, /ask
   config.py        настройки из переменных окружения и .env
-  db.py            работа с Postgres
+  models.py        схема базы (SQLAlchemy 2.0), источник правды для миграций
+  db.py            подключение к Postgres
   schemas.py       модели запросов и ответов (контракт API)
   rag/
     loader.py      чтение корпуса по manifest.json
@@ -99,8 +100,8 @@ app/
     ingest.py      идемпотентная загрузка документов и кусков, расчёт недостающих векторов
     embeddings.py  LocalEmbedder: sentence-transformers, префиксы query:/passage:
     store.py, retrieval.py, generation.py   заготовки этапов 3–4
+alembic/           миграции Alembic (env.py берёт DATABASE_URL из настроек)
 data/              учебный корпус + manifest.json (см. data/README.md)
-db/init/           SQL, который выполняется при первом старте Postgres (расширение, схема)
 evals/             вопросы для оценки качества (формат в questions.example.jsonl)
 scripts/           fetch_data.py скачивает корпус
 docs/notes.md      дневник обучения, запись на каждый этап
@@ -120,7 +121,7 @@ tests/
 - [x] `docker compose` с Postgres 16 + pgvector, healthcheck, init-скрипт
 - [x] FastAPI с `/health` (жив ли процесс) и `/ready` (доступны ли Postgres и pgvector)
 - [x] Запустить самому: `docker compose up -d`, `/ready` возвращает версию pgvector
-- [x] Подключиться через `psql` и выполнить `\dx`; построчно разобрать `docker-compose.yml` и `db/init/`
+- [x] Подключиться через `psql` и выполнить `\dx`; построчно разобрать `docker-compose.yml` и первую миграцию в `alembic/versions/`
 - [x] CI зелёный на GitHub
 
 Документация: [uv: проекты](https://docs.astral.sh/uv/concepts/projects/) ·
@@ -136,7 +137,7 @@ tests/
 - [x] Загрузчик `.md`, `.rst`, `.txt`, который сохраняет метаданные (`file`, `title`, `url` из `data/manifest.json`)
 - [x] Нарезка фиксированного размера с перекрытием в `app/rag/chunking.py`
 - [ ] Рекурсивная нарезка (заголовки → абзацы → предложения), не резать внутри блоков кода
-- [x] Таблицы `documents` и `chunks` (`db/init/002_schema.sql`), хеш содержимого у каждого документа
+- [x] Таблицы `documents` и `chunks` (`app/models.py` + миграция Alembic), хеш содержимого у каждого документа
 - [x] `POST /ingest` сохраняет документы и куски идемпотентно; юнит-тесты на нарезку, интеграционные на загрузку
 
 Документация: [Contextual Retrieval (Anthropic)](https://www.anthropic.com/research/contextual-retrieval) ·
@@ -152,7 +153,7 @@ tests/
 
 - [x] `uv add sentence-transformers`; `LocalEmbedder` (`intfloat/multilingual-e5-small`, 384 измерения) за протоколом `Embedder`
 - [x] У e5 есть правило: к вопросам добавлять префикс `query: `, к кускам документов — `passage: `
-- [x] Колонка `chunks.embedding vector(384)` + индекс HNSW с `vector_cosine_ops` (`db/init/003_embeddings.sql`)
+- [x] Колонка `chunks.embedding vector(384)` + индекс HNSW с `vector_cosine_ops` (в той же миграции)
 - [x] Эмбеддинги считаются пачками; пересчитываются только новые куски и куски от другой модели (`embedding_model` хранится рядом с вектором)
 - [ ] По желанию: эмбеддинги через API (например, Voyage AI) за тем же протоколом; сравнить на этапе 7
 

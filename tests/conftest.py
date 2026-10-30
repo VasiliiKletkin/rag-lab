@@ -1,9 +1,10 @@
 import os
 from collections.abc import Iterator
-from pathlib import Path
 
 import psycopg
 import pytest
+from alembic import command
+from alembic.config import Config
 
 ADMIN_URL = os.environ.get("TEST_DATABASE_ADMIN_URL", "postgresql://rag:rag@localhost:5432/rag")
 TEST_DB = "rag_test"
@@ -27,9 +28,12 @@ def test_db_url() -> str:
         admin.execute(f"DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)")
         admin.execute(f"CREATE DATABASE {TEST_DB}")
     url = ADMIN_URL.rsplit("/", 1)[0] + "/" + TEST_DB
-    with psycopg.connect(url, autocommit=True) as conn:
-        for sql_file in sorted(Path("db/init").glob("*.sql")):
-            conn.execute(sql_file.read_text(encoding="utf-8"))
+    # схема тестовой базы — те же миграции Alembic, что и у рабочей
+    os.environ["DATABASE_URL"] = url
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    command.upgrade(Config("alembic.ini"), "head")
     return url
 
 
