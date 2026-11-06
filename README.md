@@ -10,7 +10,7 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этапы 0–5 и 7 (метрики поиска). `/ingest` загружает корпус и считает векторы;
+**Статус:** этапы 0–5, 7 (метрики поиска) и 8 (агент с инструментами, `/agent/ask`). `/ingest` загружает корпус и считает векторы;
 `/search` ищет в трёх режимах (vector, hybrid, rerank); `/ask` отвечает через Claude с цитатами
 (без `ANTHROPIC_API_KEY` — `502`, остальное работает локально), `engine=langchain|llamaindex`
 делает то же на фреймворках (сравнение в [`docs/comparison.md`](docs/comparison.md)). `uv run python -m evals.run`
@@ -94,7 +94,7 @@ Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 
 ```
 app/
-  main.py          FastAPI: /health, /ready, /ingest, /search, /ask
+  main.py          FastAPI: /health, /ready, /ingest, /search, /ask, /agent/ask
   config.py        настройки из переменных окружения и .env
   models.py        схема базы (SQLAlchemy 2.0), источник правды для миграций
   db.py            подключение к Postgres
@@ -260,9 +260,9 @@ HTTP-ошибки (429 и 5xx от Claude — это не твой 500).
 
 ### Этап 8. Tool calling и простой агент
 
-- [ ] Инструменты: `search_docs(query, k, mode)`, `get_chunk(id)`, `list_documents()` со строгими JSON-схемами
-- [ ] Цикл агента с Claude (`tool_choice: auto`), лимит шагов, ошибки инструментов возвращаются как `is_error`
-- [ ] `POST /agent/ask` возвращает ответ и трассу вызовов инструментов
+- [x] Инструменты: `search_docs(query, k, mode)`, `get_chunk(id)`, `list_documents()` со строгими JSON-схемами
+- [x] Цикл агента с Claude (`tool_choice: auto`), лимит шагов, ошибки инструментов возвращаются как `is_error`
+- [x] `POST /agent/ask` возвращает ответ и трассу вызовов инструментов
 - [ ] Пять вопросов на несколько источников, где агент лучше одиночного `/ask` (замерить через этап 7)
 
 Документация: [Tool use: обзор](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) ·

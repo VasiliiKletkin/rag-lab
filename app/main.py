@@ -7,13 +7,16 @@ from fastapi import FastAPI, HTTPException, status
 from app import __version__
 from app.config import get_settings
 from app.db import connect, pgvector_version
+from app.rag.agent import run_agent
 from app.rag.embeddings import get_embedder
 from app.rag.frameworks import langchain_chain, llamaindex_engine
-from app.rag.generation import GenerationError, get_generator
+from app.rag.generation import GenerationError, get_client, get_generator
 from app.rag.ingest import embed_missing, ingest_documents
 from app.rag.loader import load_corpus
 from app.rag.retrieval import search as run_search
 from app.schemas import (
+    AgentRequest,
+    AgentResponse,
     AskRequest,
     AskResponse,
     IngestResponse,
@@ -101,4 +104,27 @@ def ask(req: AskRequest) -> AskResponse:
         # 502/503 — проблема у модели, не наш 500
         code = status.HTTP_503_SERVICE_UNAVAILABLE if exc.retryable else status.HTTP_502_BAD_GATEWAY
         logger.warning("генерация не прошла: %s", exc)
+        raise HTTPException(code, str(exc)) from exc
+
+
+@app.post("/agent/ask")
+def agent_ask(req: AgentRequest) -> AgentResponse:
+    """Агент: модель сама вызывает поиск столько раз, сколько нужно; в ответе — трасса вызовов."""
+    try:
+        client = get_client()
+        with connect() as conn:
+            return run_agent(
+                client,
+                get_settings().llm_model,
+                conn,
+                get_embedder(),
+                req.question,
+                req.max_steps,
+            )
+    except psycopg.OperationalError as exc:
+        logger.warning("агент: база недоступна: %s", exc)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
+    except GenerationError as exc:
+        code = status.HTTP_503_SERVICE_UNAVAILABLE if exc.retryable else status.HTTP_502_BAD_GATEWAY
+        logger.warning("агент: генерация не прошла: %s", exc)
         raise HTTPException(code, str(exc)) from exc

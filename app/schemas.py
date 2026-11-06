@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -46,3 +46,23 @@ class Citation(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     citations: list[Citation]
+
+
+class AgentRequest(BaseModel):
+    question: str = Field(description="Вопрос по корпусу документов")
+    max_steps: int = Field(5, ge=1, le=10, description="Сколько раз можно обратиться к модели")
+
+
+class ToolCall(BaseModel):
+    step: int
+    name: str
+    input: Any
+    output: str = Field(description="Начало результата; полный текст уходит только модели")
+    is_error: bool
+
+
+class AgentResponse(BaseModel):
+    answer: str
+    trace: list[ToolCall]
+    steps: int
+    stopped: Literal["answer", "max_steps"]

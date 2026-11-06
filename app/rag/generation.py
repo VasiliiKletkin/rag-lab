@@ -1,6 +1,8 @@
 """Этап 4: ответ на вопрос по найденным кускам с помощью Claude."""
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from typing import Protocol
 
@@ -24,6 +26,20 @@ class GenerationError(Exception):
     def __init__(self, message: str, retryable: bool) -> None:
         super().__init__(message)
         self.retryable = retryable
+
+
+@contextmanager
+def api_errors() -> Iterator[None]:
+    """Ошибки SDK -> GenerationError: слой API не должен знать классы anthropic."""
+    try:
+        yield
+    except anthropic.RateLimitError as exc:
+        raise GenerationError("лимит запросов к модели", retryable=True) from exc
+    except anthropic.APIStatusError as exc:
+        retryable = exc.status_code >= 500
+        raise GenerationError(f"ошибка модели: {exc.status_code}", retryable=retryable) from exc
+    except anthropic.APIConnectionError as exc:
+        raise GenerationError("модель недоступна", retryable=True) from exc
 
 
 class Generator(Protocol):
@@ -50,7 +66,7 @@ class ClaudeGenerator:
             }
             for h in hits
         ]
-        try:
+        with api_errors():
             message = self._client.messages.create(
                 model=self._model,
                 max_tokens=2048,
@@ -59,13 +75,6 @@ class ClaudeGenerator:
                     {"role": "user", "content": [*documents, {"type": "text", "text": question}]}
                 ],
             )
-        except anthropic.RateLimitError as exc:
-            raise GenerationError("лимит запросов к модели", retryable=True) from exc
-        except anthropic.APIStatusError as exc:
-            retryable = exc.status_code >= 500
-            raise GenerationError(f"ошибка модели: {exc.status_code}", retryable=retryable) from exc
-        except anthropic.APIConnectionError as exc:
-            raise GenerationError("модель недоступна", retryable=True) from exc
 
         logger.info(
             "claude %s: stop=%s in=%s out=%s",
@@ -100,11 +109,15 @@ class ClaudeGenerator:
 
 
 @lru_cache
-def get_generator() -> Generator:
+def get_client() -> anthropic.Anthropic:
     settings = get_settings()
     # в .env.example ключ пустой: пустая строка — это тоже «не задан»
     key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
     if not key:
         raise GenerationError("ANTHROPIC_API_KEY не задан", retryable=False)
-    client = anthropic.Anthropic(api_key=key)
-    return ClaudeGenerator(client, settings.llm_model)
+    return anthropic.Anthropic(api_key=key)
+
+
+@lru_cache
+def get_generator() -> Generator:
+    return ClaudeGenerator(get_client(), get_settings().llm_model)

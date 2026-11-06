@@ -139,7 +139,7 @@ def test_api_errors_become_generation_errors(error: type, retryable: bool) -> No
 @pytest.mark.parametrize("value", ["", None])
 def test_missing_or_empty_key_is_reported(monkeypatch, value: str | None) -> None:
     from app.config import get_settings
-    from app.rag.generation import get_generator
+    from app.rag.generation import get_client, get_generator
 
     if value is None:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -148,9 +148,11 @@ def test_missing_or_empty_key_is_reported(monkeypatch, value: str | None) -> Non
     monkeypatch.setattr("app.config.Settings.model_config", {"env_file": None, "extra": "ignore"})
     get_settings.cache_clear()
     get_generator.cache_clear()
+    get_client.cache_clear()
     try:
         with pytest.raises(GenerationError, match="ANTHROPIC_API_KEY"):
             get_generator()
     finally:
         get_settings.cache_clear()
         get_generator.cache_clear()
+        get_client.cache_clear()
