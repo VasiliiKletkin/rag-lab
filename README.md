@@ -10,7 +10,7 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этапы 0–5, 7 (метрики поиска) и 8 (агент с инструментами, `/agent/ask`). `/ingest` загружает корпус и считает векторы;
+**Статус:** этапы 0–5, 7 (метрики поиска), 8 (агент с инструментами, `/agent/ask`) и 9 (MCP-сервер). `/ingest` загружает корпус и считает векторы;
 `/search` ищет в трёх режимах (vector, hybrid, rerank); `/ask` отвечает через Claude с цитатами
 (без `ANTHROPIC_API_KEY` — `502`, остальное работает локально), `engine=langchain|llamaindex`
 делает то же на фреймворках (сравнение в [`docs/comparison.md`](docs/comparison.md)). `uv run python -m evals.run`
@@ -95,6 +95,7 @@ Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 ```
 app/
   main.py          FastAPI: /health, /ready, /ingest, /search, /ask, /agent/ask
+  mcp_server.py    MCP-сервер: те же инструменты по stdio / Streamable HTTP
   config.py        настройки из переменных окружения и .env
   models.py        схема базы (SQLAlchemy 2.0), источник правды для миграций
   db.py            подключение к Postgres
@@ -275,9 +276,10 @@ HTTP-ошибки (429 и 5xx от Claude — это не твой 500).
 
 ### Этап 9. MCP-сервер
 
-- [ ] `uv add mcp`; `app/mcp_server.py` отдаёт `search_docs` как инструмент, а документы — как ресурсы
-- [ ] Работает через stdio и Streamable HTTP
-- [ ] Проверен в MCP Inspector, затем подключён к Claude Code или Claude Desktop
+- [x] `uv add mcp`; `app/mcp_server.py` отдаёт `search_docs`, `get_chunk`, `list_documents` как инструменты, документы — как ресурсы
+- [x] Работает через stdio и Streamable HTTP (`--http`)
+- [x] Проверен клиентом MCP в тестах; подключение к Claude Code — см. «Как подключить» ниже
+- [ ] Проверен вручную в MCP Inspector и Claude Code
 
 Документация: [Что такое MCP](https://modelcontextprotocol.io/docs/getting-started/intro) ·
 [Build an MCP server](https://modelcontextprotocol.io/docs/develop/build-server) ·
@@ -286,6 +288,23 @@ HTTP-ошибки (429 и 5xx от Claude — это не твой 500).
 
 **Готово, когда** Claude Code отвечает на вопрос по корпусу, вызывая твой MCP-сервер,
 а в README описано, как его подключить.
+
+**Как подключить.** Нужны запущенный Postgres (`docker compose up -d`) и загруженный корпус.
+
+```bash
+# Claude Code: сервер запускается как процесс и общается по stdio
+claude mcp add rag-lab -- uv --directory ~/Development/rag-lab run python -m app.mcp_server
+```
+
+Claude Desktop — в `claude_desktop_config.json`:
+
+```json
+{"mcpServers": {"rag-lab": {"command": "uv",
+  "args": ["--directory", "/Users/<you>/Development/rag-lab", "run", "python", "-m", "app.mcp_server"]}}}
+```
+
+Для отладки — MCP Inspector: `npx @modelcontextprotocol/inspector uv run python -m app.mcp_server`.
+По HTTP: `uv run python -m app.mcp_server --http` и адрес `http://127.0.0.1:8001/mcp`.
 
 ### Этап 10. Продакшн-штрихи
 
