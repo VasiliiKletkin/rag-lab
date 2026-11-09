@@ -5,6 +5,7 @@ Postgres остаётся источником правды: текст куск
 возвращал готовые SearchHit без второго похода в Postgres. Переключение — VECTOR_BACKEND.
 """
 
+import warnings
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -91,9 +92,11 @@ class QdrantStore:
                 vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
             )
             # индекс по payload: фильтр по документу иначе перебирает все точки
-            client.create_payload_index(
-                collection, "document", field_schema=models.PayloadSchemaType.KEYWORD
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # в :memory:-режиме индексы не действуют
+                client.create_payload_index(
+                    collection, "document", field_schema=models.PayloadSchemaType.KEYWORD
+                )
 
     def _by_document(self, paths: list[str]):
         m = self._models

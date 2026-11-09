@@ -10,7 +10,7 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этапы 0–9 (без хвостов, требующих модели или ручной проверки). `/ingest` загружает корпус и считает векторы;
+**Статус:** все этапы 0–10 реализованы; открыты хвосты, требующие модели (ключ или Ollama) или ручного прогона — см. незакрытые пункты. `/ingest` загружает корпус и считает векторы;
 `/search` ищет в трёх режимах (vector, hybrid, rerank); `/ask` отвечает через Claude с цитатами
 (без `ANTHROPIC_API_KEY` — `502`, остальное работает локально), `engine=langchain|llamaindex`
 делает то же на фреймворках (сравнение в [`docs/comparison.md`](docs/comparison.md)). `uv run python -m evals.run`
@@ -94,7 +94,9 @@ Qdrant для этапа 6: `docker compose --profile qdrant up -d`.
 
 ```
 app/
-  main.py          FastAPI: /health, /ready, /ingest, /search, /ask, /agent/ask
+  main.py          FastAPI: /health, /ready, /ingest, /search, /ask, /ask/stream, /agent/ask, /cache/stats
+  cache.py         LRU-кэш ответов с TTL, версия индекса
+  telemetry.py     OpenTelemetry: провайдер и экспорт в Jaeger
   mcp_server.py    MCP-сервер: те же инструменты по stdio / Streamable HTTP
   config.py        настройки из переменных окружения и .env
   models.py        схема базы (SQLAlchemy 2.0), источник правды для миграций
@@ -310,10 +312,11 @@ Claude Desktop — в `claude_desktop_config.json`:
 
 ### Этап 10. Продакшн-штрихи
 
-- [ ] Стриминг: `/ask` отдаёт токены по SSE
-- [ ] Кэш: кэш эмбеддингов, кэш ответов по нормализованному вопросу + версии индекса; prompt caching для системного промпта
-- [ ] Наблюдаемость: трейсы OpenTelemetry со спанами retrieve, rerank, generate; токены и задержка в атрибутах спанов; Jaeger как профиль compose
-- [ ] Нагрузочный тест на Locust: p50/p95 и доля ошибок при фиксированном RPS, до и после кэша
+- [x] Стриминг: `POST /ask/stream` отдаёт токены по SSE (события `token`, `done` с цитатами, `error`)
+- [x] Кэш: эмбеддинги вопросов (LRU на эмбеддере), ответы `/ask` по нормализованному вопросу + версии индекса (`/cache/stats`); `cache_control` на системном промпте — без эффекта, пока промпт короче 1024 токенов
+- [x] Наблюдаемость: трейсы OpenTelemetry со спанами `retrieve` → `embed_query`, `rerank`, `generate` (токены в атрибутах); Jaeger — `docker compose --profile otel up -d`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+- [x] Нагрузочный тест на Locust: сценарий `load/locustfile.py`, отчёт `docs/load-test.md`
+- [ ] Прогнать тест и заполнить таблицу p50/p95 до и после кэша (нужен запущенный Postgres)
 
 Документация: [Стриминг (документация Claude)](https://platform.claude.com/docs/en/build-with-claude/streaming) ·
 [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) ·

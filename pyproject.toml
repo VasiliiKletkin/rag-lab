@@ -18,6 +18,10 @@ dependencies = [
     "llama-index-core>=0.14.25",
     "llama-index-llms-anthropic>=0.12.3",
     "mcp>=2.3.0",
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-instrumentation-fastapi>=0.66b2",
+    "opentelemetry-sdk>=1.45.2",
     "pgvector>=0.5.1",
     "psycopg[binary,pool]>=3.3.6",
     "pydantic-settings>=2.16.1",
@@ -33,6 +37,7 @@ package = false
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "locust>=2.47.0",
     "pytest>=9.1.1",
     "ruff>=0.17.3",
 ]

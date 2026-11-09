@@ -25,6 +25,15 @@ services:
     volumes:
       - qdrant:/qdrant/storage
 
+  # Этап 10. Запуск: docker compose --profile otel up -d; UI http://localhost:16686;
+  # приложению нужен OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+  jaeger:
+    image: jaegertracing/jaeger:2.14.0
+    profiles: ["otel"]
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
 volumes:
   pgdata:
   qdrant:

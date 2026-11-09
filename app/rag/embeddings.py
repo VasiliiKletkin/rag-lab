@@ -25,6 +25,9 @@ class LocalEmbedder:
 
         self.name = model_name
         self._model = SentenceTransformer(model_name)
+        # Этап 10: один и тот же вопрос не считается дважды. Кэш на экземпляре, а не на методе
+        # (lru_cache на методе держал бы self и не освобождал модель). Кортеж — чтобы не мутировали.
+        self._cached_query = lru_cache(maxsize=2048)(self._encode_query)
         self.dim = self._model.get_sentence_embedding_dimension()
         if self.dim != expected_dim:
             raise ValueError(
@@ -38,7 +41,10 @@ class LocalEmbedder:
         return vectors.tolist()
 
     def embed_query(self, text: str) -> list[float]:
-        return self._model.encode("query: " + text, normalize_embeddings=True).tolist()
+        return list(self._cached_query(text))
+
+    def _encode_query(self, text: str) -> tuple[float, ...]:
+        return tuple(self._model.encode("query: " + text, normalize_embeddings=True).tolist())
 
 
 @lru_cache

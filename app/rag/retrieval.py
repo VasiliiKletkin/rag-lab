@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.rag.embeddings import Embedder
 from app.rag.store import PgVectorStore, VectorStore, get_store
 from app.schemas import SearchHit
+from app.telemetry import tracer
 
 SearchMode = Literal["vector", "hybrid", "rerank"]
 
@@ -98,16 +99,24 @@ def search(
     document — искать только в одном документе (по пути)."""
     candidates = candidates or get_settings().candidates
     store = store or get_store(conn)
-    query_vector = embedder.embed_query(query)
-    if mode == "vector":
-        return store.search(query_vector, k, document)
-    fused = reciprocal_rank_fusion(
-        [
-            store.search(query_vector, candidates, document),
-            lexical_search(conn, query, candidates, document),
-        ]
-    )
+    with tracer.start_as_current_span("retrieve") as span:
+        span.set_attributes({"rag.mode": mode, "rag.k": k, "rag.store": store.name})
+        with tracer.start_as_current_span("embed_query"):
+            query_vector = embedder.embed_query(query)
+        if mode == "vector":
+            hits = store.search(query_vector, k, document)
+            span.set_attribute("rag.hits", len(hits))
+            return hits
+        fused = reciprocal_rank_fusion(
+            [
+                store.search(query_vector, candidates, document),
+                lexical_search(conn, query, candidates, document),
+            ]
+        )
+        span.set_attribute("rag.candidates", len(fused))
     if mode == "hybrid":
         return fused[:k]
     reranker = reranker or get_reranker()
-    return reranker.rerank(query, fused[:candidates])[:k]
+    with tracer.start_as_current_span("rerank") as span:
+        span.set_attribute("rag.candidates", min(len(fused), candidates))
+        return reranker.rerank(query, fused[:candidates])[:k]

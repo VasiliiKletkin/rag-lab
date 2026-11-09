@@ -19,6 +19,8 @@ def test_ask_returns_answer_with_citations(monkeypatch) -> None:
     monkeypatch.setattr(main, "get_embedder", lambda: object())
     monkeypatch.setattr(main, "run_search", lambda *a, **kw: hits)
     monkeypatch.setattr(main, "get_generator", lambda: Gen())
+    monkeypatch.setattr(main, "index_version", lambda conn: "v")
+    main.answer_cache.clear()
 
     response = TestClient(main.app).post("/ask", json={"question": "Какие индексы?"})
 
@@ -30,6 +32,8 @@ def test_ask_without_key_is_502(monkeypatch) -> None:
     monkeypatch.setattr(main, "connect", lambda: FakeConn())
     monkeypatch.setattr(main, "get_embedder", lambda: object())
     monkeypatch.setattr(main, "run_search", lambda *a, **kw: [])
+    monkeypatch.setattr(main, "index_version", lambda conn: "v")
+    main.answer_cache.clear()
 
     def no_key():
         raise GenerationError("ANTHROPIC_API_KEY не задан", retryable=False)

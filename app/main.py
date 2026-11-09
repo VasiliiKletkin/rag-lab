@@ -1,10 +1,15 @@
+import json
 import logging
+from collections.abc import Iterator
 from dataclasses import asdict
 
 import psycopg
 from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import StreamingResponse
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from app import __version__
+from app.cache import LRUCache, answer_key, index_version
 from app.config import get_settings
 from app.db import connect, pgvector_version
 from app.rag.agent import run_agent
@@ -24,6 +29,7 @@ from app.schemas import (
     SearchRequest,
     SearchResponse,
 )
+from app.telemetry import setup_tracing
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,11 @@ app = FastAPI(
     version=__version__,
     description="Вопросы и ответы по документам: RAG на FastAPI, pgvector и Claude.",
 )
+# Этап 10: HTTP-спан на каждый запрос, наши спаны retrieve/rerank/generate — внутри него
+setup_tracing()
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready")
+
+answer_cache: LRUCache[AskResponse] = LRUCache(maxsize=512, ttl_seconds=3600)
 
 
 @app.get("/health")
@@ -104,8 +115,14 @@ def ask(req: AskRequest) -> AskResponse:
                 return llamaindex_engine.ask(
                     conn, get_embedder(), llamaindex_engine.get_llm(), req.question, req.k
                 )
+            # Этап 10: кэш ответов. Ключ включает версию индекса: после /ingest промаха не избежать
+            key = answer_key(req.question, req.k, index_version(conn))
+            if (cached := answer_cache.get(key)) is not None:
+                return cached
             hits = run_search(conn, get_embedder(), req.question, req.k, "rerank")
-        return get_generator().answer(req.question, hits)
+        response = get_generator().answer(req.question, hits)
+        answer_cache.put(key, response)
+        return response
     except psycopg.OperationalError as exc:
         logger.warning("поиск не прошёл: %s", exc)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
@@ -114,6 +131,52 @@ def ask(req: AskRequest) -> AskResponse:
         code = status.HTTP_503_SERVICE_UNAVAILABLE if exc.retryable else status.HTTP_502_BAD_GATEWAY
         logger.warning("генерация не прошла: %s", exc)
         raise HTTPException(code, str(exc)) from exc
+
+
+def sse(event: str, data: str) -> str:
+    # формат Server-Sent Events: строки event/data, пустая строка — конец события
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+@app.post("/ask/stream")
+def ask_stream(req: AskRequest) -> StreamingResponse:
+    """То же, что /ask, но токены уходят клиенту по мере генерации (SSE).
+
+    События: `token` — кусок текста; `done` — итоговый AskResponse с цитатами;
+    `error` — модель не ответила. HTTP-код уже 200 к моменту ошибки — поэтому событие."""
+    try:
+        with connect() as conn:
+            hits = run_search(conn, get_embedder(), req.question, req.k, "rerank")
+        generator = get_generator()
+    except psycopg.OperationalError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
+    except GenerationError as exc:
+        code = status.HTTP_503_SERVICE_UNAVAILABLE if exc.retryable else status.HTTP_502_BAD_GATEWAY
+        raise HTTPException(code, str(exc)) from exc
+
+    def events() -> Iterator[str]:
+        try:
+            for part in generator.stream(req.question, hits):
+                if isinstance(part, AskResponse):
+                    yield sse("done", part.model_dump_json())
+                else:
+                    yield sse("token", json.dumps(part, ensure_ascii=False))
+        except GenerationError as exc:
+            logger.warning("стрим оборвался: %s", exc)
+            yield sse("error", json.dumps({"detail": str(exc)}, ensure_ascii=False))
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@app.get("/cache/stats")
+def cache_stats() -> dict[str, float | int]:
+    stats = answer_cache.stats
+    return {
+        "hits": stats.hits,
+        "misses": stats.misses,
+        "size": stats.size,
+        "hit_rate": round(stats.hit_rate, 3),
+    }
 
 
 @app.post("/agent/ask")
