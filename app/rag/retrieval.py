@@ -7,25 +7,17 @@ import psycopg
 
 from app.config import get_settings
 from app.rag.embeddings import Embedder
+from app.rag.store import PgVectorStore, VectorStore, get_store
 from app.schemas import SearchHit
 
 SearchMode = Literal["vector", "hybrid", "rerank"]
-
-# <=> — косинусное расстояние; 1 - расстояние = похожесть, оценка читается «чем больше, тем лучше»
-VECTOR_SQL = """
-SELECT c.id, d.path, c.content, 1 - (c.embedding <=> %(q)s::vector) AS score
-FROM chunks c JOIN documents d ON d.id = c.document_id
-WHERE c.embedding IS NOT NULL
-ORDER BY c.embedding <=> %(q)s::vector
-LIMIT %(k)s
-"""
 
 # websearch_to_tsquery соединяет слова через И: русский вопрос к английскому тексту даст 0 строк
 LEXICAL_SQL = """
 SELECT c.id, d.path, c.content, ts_rank_cd(c.tsv, q) AS score
 FROM chunks c JOIN documents d ON d.id = c.document_id,
      websearch_to_tsquery('english', %(q)s) q
-WHERE c.tsv @@ q
+WHERE c.tsv @@ q AND (%(doc)s::text IS NULL OR d.path = %(doc)s)
 ORDER BY score DESC
 LIMIT %(k)s
 """
@@ -35,12 +27,16 @@ def _hits(rows: list[tuple]) -> list[SearchHit]:
     return [SearchHit(chunk_id=str(i), document=p, text=t, score=float(s)) for i, p, t, s in rows]
 
 
-def vector_search(conn: psycopg.Connection, query_vector: list[float], k: int) -> list[SearchHit]:
-    return _hits(conn.execute(VECTOR_SQL, {"q": query_vector, "k": k}).fetchall())
+def vector_search(
+    conn: psycopg.Connection, query_vector: list[float], k: int, document: str | None = None
+) -> list[SearchHit]:
+    return PgVectorStore(conn).search(query_vector, k, document)
 
 
-def lexical_search(conn: psycopg.Connection, query: str, k: int) -> list[SearchHit]:
-    return _hits(conn.execute(LEXICAL_SQL, {"q": query, "k": k}).fetchall())
+def lexical_search(
+    conn: psycopg.Connection, query: str, k: int, document: str | None = None
+) -> list[SearchHit]:
+    return _hits(conn.execute(LEXICAL_SQL, {"q": query, "k": k, "doc": document}).fetchall())
 
 
 def reciprocal_rank_fusion(rankings: list[list[SearchHit]], k: int = 60) -> list[SearchHit]:
@@ -93,15 +89,23 @@ def search(
     mode: SearchMode,
     candidates: int | None = None,
     reranker: Reranker | None = None,
+    store: VectorStore | None = None,
+    document: str | None = None,
 ) -> list[SearchHit]:
-    """vector — косинус в pgvector; hybrid — вектор + полнотекстовый поиск через RRF;
-    rerank — гибридные кандидаты, пересортированные cross-encoder'ом."""
+    """vector — косинус в векторной базе (pgvector или Qdrant, см. VECTOR_BACKEND);
+    hybrid — вектор + полнотекстовый поиск Postgres через RRF;
+    rerank — гибридные кандидаты, пересортированные cross-encoder'ом.
+    document — искать только в одном документе (по пути)."""
     candidates = candidates or get_settings().candidates
+    store = store or get_store(conn)
     query_vector = embedder.embed_query(query)
     if mode == "vector":
-        return vector_search(conn, query_vector, k)
+        return store.search(query_vector, k, document)
     fused = reciprocal_rank_fusion(
-        [vector_search(conn, query_vector, candidates), lexical_search(conn, query, candidates)]
+        [
+            store.search(query_vector, candidates, document),
+            lexical_search(conn, query, candidates, document),
+        ]
     )
     if mode == "hybrid":
         return fused[:k]

@@ -11,9 +11,10 @@ from app.rag.agent import run_agent
 from app.rag.embeddings import get_embedder
 from app.rag.frameworks import langchain_chain, llamaindex_engine
 from app.rag.generation import GenerationError, get_client, get_generator
-from app.rag.ingest import embed_missing, ingest_documents
+from app.rag.ingest import embed_missing, ingest_documents, mirror_vectors
 from app.rag.loader import load_corpus
 from app.rag.retrieval import search as run_search
+from app.rag.store import get_store
 from app.schemas import (
     AgentRequest,
     AgentResponse,
@@ -63,8 +64,14 @@ def ingest() -> IngestResponse:
     documents = load_corpus(settings.data_dir)
     try:
         with connect() as conn:
-            stats = ingest_documents(conn, documents, settings.chunk_size, settings.chunk_overlap)
-            embedded = embed_missing(conn, get_embedder())
+            store = get_store(conn)
+            stats = ingest_documents(
+                conn, documents, settings.chunk_size, settings.chunk_overlap, store=store
+            )
+            embedded = embed_missing(conn, get_embedder(), store=store)
+            mirrored = mirror_vectors(conn, store)
+            if mirrored:
+                logger.info("%s: перезаписано %s векторов", store.name, mirrored)
     except psycopg.OperationalError as exc:
         logger.warning("загрузка не прошла: %s", exc)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc
@@ -75,7 +82,9 @@ def ingest() -> IngestResponse:
 def search(req: SearchRequest) -> SearchResponse:
     try:
         with connect() as conn:
-            hits = run_search(conn, get_embedder(), req.query, req.k, req.mode)
+            hits = run_search(
+                conn, get_embedder(), req.query, req.k, req.mode, document=req.document
+            )
     except psycopg.OperationalError as exc:
         logger.warning("поиск не прошёл: %s", exc)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "база недоступна") from exc

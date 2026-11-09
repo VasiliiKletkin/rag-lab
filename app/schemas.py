@@ -15,6 +15,7 @@ class SearchRequest(BaseModel):
     query: str = Field(description="Поисковый запрос")
     k: int = Field(5, ge=1, le=50, description="Сколько кусков вернуть")
     mode: Literal["vector", "hybrid", "rerank"] = Field("vector", description="Режим поиска")
+    document: str | None = Field(None, description="Искать только в этом документе (путь)")
 
 
 class SearchHit(BaseModel):

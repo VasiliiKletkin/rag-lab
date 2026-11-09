@@ -10,7 +10,7 @@
 У каждого этапа ниже есть чек-лист, ссылки на официальную документацию и проверяемый
 критерий «готово».
 
-**Статус:** этапы 0–5, 7 (метрики поиска), 8 (агент с инструментами, `/agent/ask`) и 9 (MCP-сервер). `/ingest` загружает корпус и считает векторы;
+**Статус:** этапы 0–9 (без хвостов, требующих модели или ручной проверки). `/ingest` загружает корпус и считает векторы;
 `/search` ищет в трёх режимах (vector, hybrid, rerank); `/ask` отвечает через Claude с цитатами
 (без `ANTHROPIC_API_KEY` — `502`, остальное работает локально), `engine=langchain|llamaindex`
 делает то же на фреймворках (сравнение в [`docs/comparison.md`](docs/comparison.md)). `uv run python -m evals.run`
@@ -108,7 +108,7 @@ app/
     retrieval.py   векторный и полнотекстовый поиск, RRF, cross-encoder
     generation.py  ClaudeGenerator: куски как document-блоки, цитаты, обработка ошибок API
     frameworks/    тот же RAG на LangChain (LCEL) и LlamaIndex поверх нашего поиска
-    store.py       заготовка этапа 6
+    store.py       VectorStore: PgVectorStore и QdrantStore, выбор по VECTOR_BACKEND
 alembic/           миграции Alembic (env.py берёт DATABASE_URL из настроек)
 data/              учебный корпус + manifest.json (см. data/README.md)
 evals/             questions.jsonl (38 вопросов), metrics.py, run.py, results.md
@@ -229,10 +229,12 @@ HTTP-ошибки (429 и 5xx от Claude — это не твой 500).
 
 ### Этап 6. Qdrant как вторая векторная база
 
-- [ ] `docker compose --profile qdrant up -d`; `uv add qdrant-client`
-- [ ] `QdrantStore` реализует протокол `VectorStore`; переключение `VECTOR_BACKEND=pgvector|qdrant`
-- [ ] Фильтры по payload (например, поиск только в одном документе); гибридный запрос Qdrant (dense + sparse)
-- [ ] Заметки: pgvector или Qdrant для такой задачи (эксплуатация, фильтры, масштаб, стоимость)
+- [x] `docker compose --profile qdrant up -d`; `uv add qdrant-client`
+- [x] `QdrantStore` реализует протокол `VectorStore`; переключение `VECTOR_BACKEND=pgvector|qdrant`; Postgres остаётся источником правды, Qdrant — зеркало векторов (`mirror_vectors` догоняет при расхождении)
+- [x] Фильтр по payload: `document` в `/search` ищет только в одном документе (в обеих базах)
+- [ ] Гибридный запрос Qdrant (dense + sparse) — нужна sparse-модель (SPLADE/BM25 от fastembed)
+- [x] Заметки: pgvector или Qdrant для такой задачи — `docs/notes.md`
+- [ ] Метрики этапа 7 на Qdrant (нужен запущенный Qdrant: `evals/run.py` с `VECTOR_BACKEND=qdrant`)
 
 Документация: [Qdrant: быстрый старт](https://qdrant.tech/documentation/quickstart/) ·
 [Qdrant: фильтрация](https://qdrant.tech/documentation/search/filtering/) ·
