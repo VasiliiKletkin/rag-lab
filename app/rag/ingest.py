@@ -131,8 +131,10 @@ def embed_missing(
     return len(rows)
 
 
+# ::real[] — чтобы вектор пришёл списком чисел даже без register_vector на соединении
 SELECT_EMBEDDED = """
-SELECT c.id, d.path, c.content, c.embedding FROM chunks c JOIN documents d ON d.id = c.document_id
+SELECT c.id, d.path, c.content, c.embedding::real[]
+FROM chunks c JOIN documents d ON d.id = c.document_id
 WHERE c.embedding IS NOT NULL ORDER BY c.id
 """
 

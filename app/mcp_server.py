@@ -39,37 +39,39 @@ def search_docs(
     query: Annotated[str, Field(min_length=1, description="Запрос на английском")],
     k: Annotated[int, Field(ge=1, le=10, description="Сколько кусков вернуть")] = 5,
     mode: Literal["vector", "hybrid", "rerank"] = "rerank",
-) -> list[dict]:
+) -> dict:
     """Найти куски текста по смыслу запроса. Возвращает id куска, документ, оценку и текст."""
     try:
         args = tools.SearchDocsArgs(query=query, k=k, mode=mode)
     except ValidationError as exc:
         raise ToolError(f"неверные аргументы: {exc}") from exc
     with connect() as conn:
-        return tools.search_docs(conn, get_embedder(), args)
+        return {"hits": tools.search_docs(conn, get_embedder(), args)}
 
 
 @server.tool()
-def get_chunk(id: Annotated[int, Field(description="id куска из search_docs")]) -> list[dict]:
+def get_chunk(id: Annotated[int, Field(description="id куска из search_docs")]) -> dict:
     """Кусок по id вместе с соседями из того же документа — когда найденный кусок обрывается."""
     with connect() as conn:
         try:
-            return tools.get_chunk(conn, get_embedder(), tools.GetChunkArgs(id=id))
+            return {"chunks": tools.get_chunk(conn, get_embedder(), tools.GetChunkArgs(id=id))}
         except tools.ToolError as exc:
             raise ToolError(str(exc)) from exc
 
 
 @server.tool()
-def list_documents() -> list[dict]:
+def list_documents() -> dict:
     """Документы корпуса: путь, заголовок, число кусков."""
+    # Возвращаем словарь, а не список: список SDK разбивает на блок content на каждый элемент,
+    # словарь уходит одним JSON-блоком плюс structuredContent.
     with connect() as conn:
-        return tools.list_documents(conn, get_embedder(), tools.NoArgs())
+        return {"documents": tools.list_documents(conn, get_embedder(), tools.NoArgs())}
 
 
 # Ресурс — это данные, которые клиент читает сам (без решения модели), в отличие от инструмента.
 @server.resource("rag://documents", mime_type="application/json")
 def documents_resource() -> str:
-    return json.dumps(list_documents(), ensure_ascii=False)
+    return json.dumps(list_documents()["documents"], ensure_ascii=False)
 
 
 DOCUMENT_SQL = """

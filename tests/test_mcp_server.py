@@ -51,7 +51,7 @@ async def test_search_docs_over_mcp(wired) -> None:
         result = await client.call_tool("search_docs", {"query": "HNSW index", "mode": "hybrid"})
 
     assert result.is_error is False
-    hits = json.loads(result.content[0].text)
+    hits = json.loads(result.content[0].text)["hits"]
     assert hits[0]["document"] == "pg.md"
 
 
